@@ -75,4 +75,5 @@ export class Contrat {
 
   @OneToMany(() => Commentaire, (comment) => comment.contrat)
   comment: Commentaire[];
+    contract: { type: "Point"; coordinates: [number, number]; };
 }

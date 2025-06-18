@@ -11,6 +11,7 @@ import { CacheModule } from '@nestjs/cache-manager';
 import { redisStore } from 'cache-manager-redis-yet';
 import { TacheModule } from './tache/tache.module';
 import { EntrepriseModule } from './entreprise/entreprise.module';
+//import { ContractModule } from './contrat/contract.module';
 
 @Module({
   imports: [
@@ -35,6 +36,7 @@ import { EntrepriseModule } from './entreprise/entreprise.module';
     AuthModule,
     TacheModule,
     EntrepriseModule,
+    //ContractModule,
 
     // Cache avec Redis
     CacheModule.registerAsync({
@@ -42,7 +44,7 @@ import { EntrepriseModule } from './entreprise/entreprise.module';
       useFactory: async (configService: ConfigService) => ({
         store: redisStore,
         host: configService.get<string>('REDIS_HOST'),
-        port: configService.get<number>('REDIS_PORT') || 6379,
+        port: configService.get<number>('REDIS_PORT') ,
         username: configService.get<string>('REDIS_USERNAME'),
         password: configService.get<string>('REDIS_PASSWORD'),
         tls: configService.get('REDIS_TLS') === 'true',

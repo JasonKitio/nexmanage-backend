@@ -1,29 +1,57 @@
-import { ExecutionContext, Injectable, UnauthorizedException } from '@nestjs/common';
+// guards/jwt-auth.guard.ts
+import {
+  Injectable,
+  ExecutionContext,
+  UnauthorizedException
+} from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
-import { CacheService } from '../../cache/cache.service';
+import { JwtService } from '@nestjs/jwt';
+import { ConfigService } from '@nestjs/config';
+import { Request } from 'express';
 
 @Injectable()
 export class JwtAuthGuard extends AuthGuard('jwt') {
-  constructor(private cacheService: CacheService) {
+  constructor(
+    private jwtService: JwtService,
+    private configService: ConfigService
+  ) {
     super();
   }
 
-  async canActivate(context: ExecutionContext): Promise<boolean> {
-    const request = context.switchToHttp().getRequest();
-    const token = this.extractTokenFromHeader(request);
-    
-    if (token) {
-      const isBlacklisted = await this.cacheService.get(`blacklist_${token}`);
-      if (isBlacklisted) {
-        throw new UnauthorizedException('Token invalide');
-      }
+  canActivate(context: ExecutionContext) {
+    const request = context.switchToHttp().getRequest<Request>();
+
+    const token =
+      this.extractTokenFromCookie(request) ||
+      this.extractTokenFromHeader(request);
+
+    if (!token) {
+      throw new UnauthorizedException('Token manquant');
     }
 
-    return super.canActivate(context) as Promise<boolean>;
+    try {
+      const payload = this.jwtService.verify(token, {
+        secret: this.configService.get<string>('JWT_SECRET'),
+      });
+
+      // Ajouter le payload à l'objet request
+      request['user'] = payload;
+    } catch (err) {
+      throw new UnauthorizedException('Token invalide ou expiré');
+    }
+
+    return true;
   }
 
-  private extractTokenFromHeader(request: any): string | undefined {
-    const [type, token] = request.headers.authorization?.split(' ') ?? [];
+  private extractTokenFromCookie(request: Request): string | undefined {
+    return request.cookies?.['access_token'];
+  }
+
+  private extractTokenFromHeader(request: Request): string | undefined {
+    const authHeader = request.headers.authorization;
+    if (!authHeader) return undefined;
+
+    const [type, token] = authHeader.split(' ');
     return type === 'Bearer' ? token : undefined;
   }
 }

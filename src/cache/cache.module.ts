@@ -8,8 +8,8 @@ import { CacheService } from './cache.service';
     NestCacheModule.registerAsync({
       imports: [ConfigModule],
       useFactory: async (configService: ConfigService) => ({
-        host: configService.get<string>('REDIS_HOST') || 'localhost',
-        port: configService.get<number>('REDIS_PORT') || 6379,
+        host: configService.get<string>('REDIS_HOST') ,
+        port: configService.get<number>('REDIS_PORT'),
         username: configService.get<string>('REDIS_USERNAME'),
         password: configService.get<string>('REDIS_PASSWORD'),
         tls: configService.get('REDIS_TLS') === 'true',

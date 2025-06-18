@@ -42,11 +42,38 @@ import { Response } from 'express';
 export class AuthController {
   constructor(private authService: AuthService) {}
 
+  // Fonction utilitaire pour définir les cookies
+  private setCookies(res: Response, accessToken: string, refreshToken: string) {
+    // Cookie pour l'access token (httpOnly, secure, sameSite)
+    res.cookie('accessToken', accessToken, {
+      // httpOnly: true,
+      // secure: process.env.NODE_ENV === 'production', // HTTPS en production
+      //sameSite: 'strict',
+      maxAge: 15 * 60 * 1000, // 15 minutes
+      path: '/'
+    });
+
+    // Cookie pour le refresh token
+    res.cookie('refreshToken', refreshToken, {
+      // httpOnly: true,
+      // secure: process.env.NODE_ENV === 'production',
+      // sameSite: 'strict',
+      maxAge: 7 * 24 * 60 * 60 * 1000, // 7 jours
+      path: '/'
+    });
+  }
+
+  // Fonction pour supprimer les cookies
+  private clearCookies(res: Response) {
+    res.clearCookie('accessToken', { path: '/' });
+    res.clearCookie('refreshToken', { path: '/' });
+  }
+
 @Post('register')
 @HttpCode(HttpStatus.CREATED)
 @ApiOperation({ summary: 'Inscription classique (Admin par défaut)' })
 @ApiBody({
-  description: 'Données requises pour l’inscription',
+  description: 'Données requises pour linscription',
   type: RegisterDto,
   examples: {
     default: {
@@ -65,11 +92,8 @@ export class AuthController {
   description: 'Utilisateur créé avec succès',
   schema: {
     example: {
-      id: 'abc123',
-      nom: 'Jean Dupont',
-      telephone: '+237690000000',
-      role: 'ADMIN',
-      token: 'eyJhbGciOiJIUzI1NiIsInR...'
+      message: 'Code de vérification envoyé par SMS',
+      phone: '+237690000000'
     }
   }
 })
@@ -80,8 +104,20 @@ async register(@Body() registerDto: RegisterDto) {
 
 
   @Post('verify-registration')
-  async verifyRegistration(@Body() verifyPhoneDto: VerifyPhoneDto) {
-    return this.authService.verifyPhoneAndRegister(verifyPhoneDto);
+  async verifyRegistration(
+    @Body() verifyPhoneDto: VerifyPhoneDto,
+    @Res({ passthrough: true }) res: Response
+  ) {
+    const result = await this.authService.verifyPhoneAndRegister(verifyPhoneDto);
+    
+    // Définir les cookies avec les tokens
+    this.setCookies(res, result.tokens.accessToken, result.tokens.refreshToken);
+    
+    // Retourner seulement les données utilisateur
+    return {
+      user: result.user,
+      message: 'Inscription réussie'
+    };
   }
 
 
@@ -111,14 +147,25 @@ async register(@Body() registerDto: RegisterDto) {
         telephone: '+237690000000',
         role: 'ADMIN',
       },
-      access_token: 'eyJhbGciOiJIUzI1NiIsInR...',
-      refresh_token: 'eyJhbGciOiJIUzI1NiIsInR...'
+      message: 'Connexion réussie'
     }
   }
 })
 @ApiResponse({ status: 401, description: 'Identifiants invalides' })
-async login(@Body() loginDto: LoginDto) {
-  return this.authService.login(loginDto);
+async login(
+  @Body() loginDto: LoginDto,
+  @Res({ passthrough: true }) res: Response
+) {
+  const result = await this.authService.login(loginDto);
+  
+  // Définir les cookies avec les tokens
+  this.setCookies(res, result.tokens.accessToken, result.tokens.refreshToken);
+  
+  // Retourner seulement les données utilisateur
+  return {
+    user: result.user,
+    message: 'Connexion réussie'
+  };
 }
 
 
@@ -164,20 +211,23 @@ async login(@Body() loginDto: LoginDto) {
     try {
       const result = await this.authService.googleCallback(code, state);
       
-      // Vous pouvez soit retourner le JSON soit rediriger vers votre frontend
-      // Option 1: Retourner JSON
-      return res.status(HttpStatus.OK).json(result);
+      // Définir les cookies avec les tokens
+      this.setCookies(res, result.tokens.accessToken, result.tokens.refreshToken);
       
-      // Option 2: Rediriger vers votre frontend avec les tokens
-      // const frontendUrl = `${process.env.FRONTEND_URL}/auth/success?token=${result.access_token}&refresh=${result.refresh_token}`;
-      // return res.redirect(frontendUrl);
+      // Option 1: Retourner JSON avec passthrough
+      // return res.status(HttpStatus.OK).json({
+      //   user: result.user,
+      //   message: 'Authentification Google réussie'
+      // });
+      
+      // Option 2: Rediriger vers votre frontend
+      const frontendUrl = `${process.env.FRONTEND_URL}/dashboard?auth=success`;
+      return res.redirect(frontendUrl);
       
     } catch (error) {
-      // Rediriger vers une page d'erreur ou retourner l'erreur
-      return res.status(HttpStatus.UNAUTHORIZED).json({
-        message: 'Authentification Google échouée',
-        error: error.message
-      });
+      // Rediriger vers une page d'erreur
+      const errorUrl = `${process.env.FRONTEND_URL}/auth/error?message=${encodeURIComponent(error.message)}`;
+      return res.redirect(errorUrl);
     }
   }
 
@@ -199,14 +249,16 @@ async login(@Body() loginDto: LoginDto) {
     try {
       const result = await this.authService.googleEmployeeCallback(code, state);
       
-      // Retourner le résultat ou rediriger
-      return res.status(HttpStatus.OK).json(result);
+      // Définir les cookies avec les tokens
+      this.setCookies(res, result.tokens.accessToken, result.tokens.refreshToken);
+      
+      // Rediriger vers le frontend
+      const frontendUrl = `${process.env.FRONTEND_URL}/employee/dashboard?auth=success`;
+      return res.redirect(frontendUrl);
       
     } catch (error) {
-      return res.status(HttpStatus.UNAUTHORIZED).json({
-        message: 'Authentification Google échouée',
-        error: error.message
-      });
+      const errorUrl = `${process.env.FRONTEND_URL}/auth/error?message=${encodeURIComponent(error.message)}`;
+      return res.redirect(errorUrl);
     }
   }
 
@@ -228,12 +280,22 @@ async login(@Body() loginDto: LoginDto) {
     description: 'Token rafraîchi',
     schema: {
       example: {
-        access_token: 'eyJhbGciOiJIUzI1NiIsInR...'
+        message: 'Tokens rafraîchis avec succès'
       }
     }
   })
-  async refreshToken(@Body() refreshTokenDto: RefreshTokenDto) {
-    return this.authService.refreshToken(refreshTokenDto);
+  async refreshToken(
+    @Body() refreshTokenDto: RefreshTokenDto,
+    @Res({ passthrough: true }) res: Response
+  ) {
+    const result = await this.authService.refreshToken(refreshTokenDto);
+    
+    // Définir les nouveaux cookies
+    this.setCookies(res, result.tokens.accessToken, result.tokens.refreshToken);
+    
+    return {
+      message: 'Tokens rafraîchis avec succès'
+    };
   }
 
 @Post('forgot-password')
@@ -295,7 +357,6 @@ async resetPassword(@Body() resetPasswordDto: ResetPasswordDto) {
   return this.authService.resetPassword(resetPasswordDto);
 }
 
-
   
   @Post('create-user')
   @Roles( Role.ADMIN)
@@ -342,10 +403,19 @@ async resetPassword(@Body() resetPasswordDto: ResetPasswordDto) {
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Déconnexion' })
   @ApiResponse({ status: 200, description: 'Déconnexion réussie' })
-  async logout(@Request() req) {
+  async logout(
+    @Request() req,
+    @Res({ passthrough: true }) res: Response
+  ) {
     const token = req.headers.authorization?.replace('Bearer ', '');
     const userId = req.user.sub;
-    return this.authService.logout(token, userId);
+    
+    const result = await this.authService.logout(token, userId);
+    
+    // Supprimer les cookies
+    this.clearCookies(res);
+    
+    return result;
   }
 
   @Post('update-password')
@@ -429,9 +499,6 @@ async resendCode(@Body() resendCodeDto: ResendCodeDto) {
     resendCodeDto.userId
   );
 }
-
-
-
 
   @Get('profile')
   @UseGuards(JwtAuthGuard)

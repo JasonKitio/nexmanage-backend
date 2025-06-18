@@ -107,39 +107,43 @@ export class AuthService {
   }
 
 
-  async login(loginDto: LoginDto) {
-    const { telephone, motDePasse } = loginDto;
-    
-    const user = await this.usersService.findByPhone(telephone);
-    if (!user) {
-      throw new UnauthorizedException('Identifiants invalides');
-    }
-
-    if (!user.isActif) {
-      throw new UnauthorizedException('Compte désactivé');
-    }
-
-    const isPasswordValid = await bcrypt.compare(motDePasse, user.motDePasse);
-    if (!isPasswordValid) {
-      throw new UnauthorizedException('Identifiants invalides');
-    }
-
-    const { motDePasse: _, ...userWithoutPassword } = user;
-    const tokens = this.generateTokens(user.idUtilisateur, user.telephone, user.role);
-
-    // Stocker le refresh token dans le cache
-    await this.cacheService.set(
-      `refresh_token_${user.idUtilisateur}`, 
-      tokens.refreshToken, 
-      604800 // 7 jours en secondes
-    );
-
-    return {
-      user: userWithoutPassword,
-      access_token: tokens.accessToken,
-      refresh_token: tokens.refreshToken
-    };
+async login(loginDto: LoginDto) {
+  const { telephone, motDePasse } = loginDto;
+  
+  const user = await this.usersService.findByPhone(telephone);
+  if (!user) {
+    throw new UnauthorizedException('Identifiants invalides');
   }
+
+  if (!user.isActif) {
+    throw new UnauthorizedException('Compte désactivé');
+  }
+
+  const isPasswordValid = await bcrypt.compare(motDePasse, user.motDePasse);
+  if (!isPasswordValid) {
+    throw new UnauthorizedException('Identifiants invalides');
+  }
+
+  const { motDePasse: _, ...userWithoutPassword } = user;
+  const tokens = this.generateTokens(user.idUtilisateur, user.telephone, user.role);
+
+  // Stocker le refresh token dans le cache
+  await this.cacheService.set(
+    `refresh_token_${user.idUtilisateur}`, 
+    tokens.refreshToken, 
+    604800 // 7 jours en secondes
+  );
+
+  // Retourner seulement l'utilisateur et les tokens (sans les inclure dans la réponse JSON)
+  return {
+    user: userWithoutPassword,
+    tokens: {
+      accessToken: tokens.accessToken,
+      refreshToken: tokens.refreshToken
+    }
+  };
+}
+
   getGoogleAuthUrl(): string {
   return this.googleClient.generateAuthUrl({
     access_type: 'offline',
@@ -161,193 +165,199 @@ export class AuthService {
     return authUrl;
   }
 
-   async googleCallback(code: string, state: string) {
-    try {
-      // Créer un nouveau client avec le redirect_uri correct
-      const googleClient = new OAuth2Client(
-        this.configService.get('GOOGLE_CLIENT_ID'),
-        this.configService.get('GOOGLE_CLIENT_SECRET'),
-        this.configService.get('GOOGLE_CALLBACK_URL')
-      );
+ async googleCallback(code: string, state: string) {
+  try {
+    // Créer un nouveau client avec le redirect_uri correct
+    const googleClient = new OAuth2Client(
+      this.configService.get('GOOGLE_CLIENT_ID'),
+      this.configService.get('GOOGLE_CLIENT_SECRET'),
+      this.configService.get('GOOGLE_CALLBACK_URL')
+    );
 
-      // Échanger le code contre les tokens
-       const tokenResponse = await googleClient.getToken(code);
-      const tokens = tokenResponse.tokens;
-      googleClient.setCredentials(tokens);
+    // Échanger le code contre les tokens
+    const tokenResponse = await googleClient.getToken(code);
+    const tokens = tokenResponse.tokens;
+    googleClient.setCredentials(tokens);
 
-      if (!tokens.id_token) {
-        throw new UnauthorizedException('No ID token provided by Google');
-      }
-
-      // Obtenir les informations utilisateur
-      const ticket = await googleClient.verifyIdToken({
-        idToken: tokens.id_token,
-        audience: this.configService.get('GOOGLE_CLIENT_ID'),
-      });
-
-      const payload = ticket.getPayload();
-      if (!payload) {
-        throw new UnauthorizedException('Token Google invalide');
-      }
-
-      const { email, name, sub: googleId } = payload;
-      if (!email) {
-        throw new UnauthorizedException('Aucun email n\'a pas été fourni par Google');
-      }
-
-      // Chercher l'utilisateur par email
-      let user = await this.usersService.findByEmail(email);
-      if (!user) {
-        // Créer un nouvel utilisateur ADMIN lors de l'inscription via Google
-        const createUserDto: CreateUserDto = {
-          nom: name ?? email.split('@')[0],
-          email,
-          telephone: `google_${googleId}`,
-          role: Role.ADMIN,
-          motDePasse: `googleoauth_${googleId}`
-        };
-        user = await this.usersService.create(createUserDto);
-      }
-
-      if (!user.isActif) {
-        throw new UnauthorizedException('Compte désactivé');
-      }
-
-      const { motDePasse, ...userWithoutPassword } = user;
-      const authTokens = this.generateTokens(user.idUtilisateur, user.telephone, user.role);
-
-      // Stocker le refresh token dans le cache
-      await this.cacheService.set(
-        `refreshtoken_${user.idUtilisateur}`,
-        authTokens.refreshToken,
-        604800 // 7 jours en secondes
-      );
-
-      return {
-        user: userWithoutPassword,
-        access_token: authTokens.accessToken,
-        refresh_token: authTokens.refreshToken
-      };
-    } catch (error) {
-      console.error('Erreur Google OAuth Callback:', error);
-      throw new UnauthorizedException('Authentification Google échouée');
+    if (!tokens.id_token) {
+      throw new UnauthorizedException('No ID token provided by Google');
     }
-  }
 
-  // Gérer le callback Google pour les employés
-  async googleEmployeeCallback(code: string, state: string) {
-    try {
-      // Créer un nouveau client avec le redirect_uri correct
-      const googleClient = new OAuth2Client(
-        this.configService.get('GOOGLE_CLIENT_ID'),
-        this.configService.get('GOOGLE_CLIENT_SECRET'),
-        this.configService.get('GOOGLE_EMPLOYEE_CALLBACK_URL')
-      );
+    // Obtenir les informations utilisateur
+    const ticket = await googleClient.verifyIdToken({
+      idToken: tokens.id_token,
+      audience: this.configService.get('GOOGLE_CLIENT_ID'),
+    });
 
-      // Échanger le code contre les tokens
-      const tokenResponse = await googleClient.getToken(code);
-      const tokens = tokenResponse.tokens;
-      googleClient.setCredentials(tokens);
-
-      if (!tokens.id_token) {
-        throw new UnauthorizedException('No ID token provided by Google');
-      }
-
-      // Obtenir les informations utilisateur
-      const ticket = await googleClient.verifyIdToken({
-        idToken: tokens.id_token,
-        audience: this.configService.get('GOOGLE_CLIENT_ID'),
-      });
-
-      const payload = ticket.getPayload();
-      if (!payload) {
-        throw new UnauthorizedException('Token Google invalide');
-      }
-
-      const { email } = payload;
-      if (!email) {
-        throw new UnauthorizedException('Aucun email n\'a pas été fourni par Google');
-      }
-
-      // Chercher UNIQUEMENT l'utilisateur existant par email
-      const user = await this.usersService.findByEmail(email);
-      if (!user) {
-        throw new UnauthorizedException('Compte non trouvé. Votre compte doit être créé par un administrateur.');
-      }
-
-      // Vérifier que c'est un employé ou manager (pas admin)
-      if (user.role === Role.ADMIN) {
-        throw new UnauthorizedException('Les administrateurs doivent utiliser l\'authentification principale');
-      }
-
-      if (!user.isActif) {
-        throw new UnauthorizedException('Compte désactivé');
-      }
-
-      const { motDePasse, ...userWithoutPassword } = user;
-      const authTokens = this.generateTokens(user.idUtilisateur, user.telephone, user.role);
-
-      // Stocker le refresh token dans le cache
-      await this.cacheService.set(
-        `refreshtoken_${user.idUtilisateur}`,
-        authTokens.refreshToken,
-        604800 // 7 jours en secondes
-      );
-
-      return {
-        user: userWithoutPassword,
-        access_token: authTokens.accessToken,
-        refresh_token: authTokens.refreshToken
-      };
-    } catch (error) {
-      console.error('Erreur Google OAuth Employee Callback:', error);
-      throw new UnauthorizedException('Authentification Google échouée');
+    const payload = ticket.getPayload();
+    if (!payload) {
+      throw new UnauthorizedException('Token Google invalide');
     }
-  }
 
-
-
-
-  async refreshToken(refreshTokenDto: RefreshTokenDto) {
-    try {
-      const { refreshToken } = refreshTokenDto;
-      
-      // Vérifier le refresh token
-      const decoded = this.jwtService.verify(refreshToken);
-      const userId = decoded.sub;
-
-      // Vérifier que le refresh token existe dans le cache
-      const storedToken = await this.cacheService.get(`refresh_token_${userId}`);
-      if (!storedToken || storedToken !== refreshToken) {
-        throw new UnauthorizedException('Refresh token invalide');
-      }
-
-      // Récupérer l'utilisateur
-      const user = await this.usersService.findById(userId);
-      if (!user || !user.isActif) {
-        throw new UnauthorizedException('Utilisateur non trouvé ou inactif');
-      }
-
-      // Générer de nouveaux tokens
-      const tokens = this.generateTokens(user.idUtilisateur, user.telephone, user.role);
-
-      // Mettre à jour le refresh token dans le cache
-      await this.cacheService.del(`refresh_token_${userId}`);
-      await this.cacheService.set(
-        `refresh_token_${userId}`, 
-        tokens.refreshToken, 
-        604800 // 7 jours en secondes
-      );
-
-      return {
-        access_token: tokens.accessToken,
-        refresh_token: tokens.refreshToken
-      };
-
-    } catch (error) {
-      throw new UnauthorizedException('Refresh token invalide ou expiré');
+    const { email, name, sub: googleId } = payload;
+    if (!email) {
+      throw new UnauthorizedException('Aucun email n\'a pas été fourni par Google');
     }
+
+    // Chercher l'utilisateur par email
+    let user = await this.usersService.findByEmail(email);
+    if (!user) {
+      // Créer un nouvel utilisateur ADMIN lors de l'inscription via Google
+      const createUserDto: CreateUserDto = {
+        nom: name ?? email.split('@')[0],
+        email,
+        telephone: `google_${googleId}`,
+        role: Role.ADMIN,
+        motDePasse: `googleoauth_${googleId}`
+      };
+      user = await this.usersService.create(createUserDto);
+    }
+
+    if (!user.isActif) {
+      throw new UnauthorizedException('Compte désactivé');
+    }
+
+    const { motDePasse, ...userWithoutPassword } = user;
+    const authTokens = this.generateTokens(user.idUtilisateur, user.telephone, user.role);
+
+    // Stocker le refresh token dans le cache
+    await this.cacheService.set(
+      `refreshtoken_${user.idUtilisateur}`,
+      authTokens.refreshToken,
+      604800 // 7 jours en secondes
+    );
+
+    return {
+      user: userWithoutPassword,
+      tokens: {
+        accessToken: authTokens.accessToken,
+        refreshToken: authTokens.refreshToken
+      }
+    };
+  } catch (error) {
+    console.error('Erreur Google OAuth Callback:', error);
+    throw new UnauthorizedException('Authentification Google échouée');
   }
+}
+
+async googleEmployeeCallback(code: string, state: string) {
+  try {
+    // Créer un nouveau client avec le redirect_uri correct
+    const googleClient = new OAuth2Client(
+      this.configService.get('GOOGLE_CLIENT_ID'),
+      this.configService.get('GOOGLE_CLIENT_SECRET'),
+      this.configService.get('GOOGLE_EMPLOYEE_CALLBACK_URL')
+    );
+
+    // Échanger le code contre les tokens
+    const tokenResponse = await googleClient.getToken(code);
+    const tokens = tokenResponse.tokens;
+    googleClient.setCredentials(tokens);
+
+    if (!tokens.id_token) {
+      throw new UnauthorizedException('No ID token provided by Google');
+    }
+
+    // Obtenir les informations utilisateur
+    const ticket = await googleClient.verifyIdToken({
+      idToken: tokens.id_token,
+      audience: this.configService.get('GOOGLE_CLIENT_ID'),
+    });
+
+    const payload = ticket.getPayload();
+    if (!payload) {
+      throw new UnauthorizedException('Token Google invalide');
+    }
+
+    const { email } = payload;
+    if (!email) {
+      throw new UnauthorizedException('Aucun email n\'a pas été fourni par Google');
+    }
+
+    // Chercher UNIQUEMENT l'utilisateur existant par email
+    const user = await this.usersService.findByEmail(email);
+    if (!user) {
+      throw new UnauthorizedException('Compte non trouvé. Votre compte doit être créé par un administrateur.');
+    }
+
+    // Vérifier que c'est un employé ou manager (pas admin)
+    if (user.role === Role.ADMIN) {
+      throw new UnauthorizedException('Les administrateurs doivent utiliser l\'authentification principale');
+    }
+
+    if (!user.isActif) {
+      throw new UnauthorizedException('Compte désactivé');
+    }
+
+    const { motDePasse, ...userWithoutPassword } = user;
+    const authTokens = this.generateTokens(user.idUtilisateur, user.telephone, user.role);
+
+    // Stocker le refresh token dans le cache
+    await this.cacheService.set(
+      `refreshtoken_${user.idUtilisateur}`,
+      authTokens.refreshToken,
+      604800 // 7 jours en secondes
+    );
+
+    return {
+      user: userWithoutPassword,
+      tokens: {
+        accessToken: authTokens.accessToken,
+        refreshToken: authTokens.refreshToken
+      }
+    };
+  } catch (error) {
+    console.error('Erreur Google OAuth Employee Callback:', error);
+    throw new UnauthorizedException('Authentification Google échouée');
+  }
+}
+
+
+
+
+ async refreshToken(refreshTokenDto: RefreshTokenDto) {
+  try {
+    const { refreshToken } = refreshTokenDto;
+    
+    // Vérifier le refresh token
+    const decoded = this.jwtService.verify(refreshToken);
+    const userId = decoded.sub;
+
+    // Vérifier que le refresh token existe dans le cache
+    const storedToken = await this.cacheService.get(`refresh_token_${userId}`);
+    if (!storedToken || storedToken !== refreshToken) {
+      throw new UnauthorizedException('Refresh token invalide');
+    }
+
+    // Récupérer l'utilisateur
+    const user = await this.usersService.findById(userId);
+    if (!user || !user.isActif) {
+      throw new UnauthorizedException('Utilisateur non trouvé ou inactif');
+    }
+
+    // Générer de nouveaux tokens
+    const tokens = this.generateTokens(user.idUtilisateur, user.telephone, user.role);
+
+    // Mettre à jour le refresh token dans le cache
+    await this.cacheService.del(`refresh_token_${userId}`);
+    await this.cacheService.set(
+      `refresh_token_${userId}`, 
+      tokens.refreshToken, 
+      604800 // 7 jours en secondes
+    );
+
+    return {
+      tokens: {
+        accessToken: tokens.accessToken,
+        refreshToken: tokens.refreshToken
+      }
+    };
+
+  } catch (error) {
+    throw new UnauthorizedException('Refresh token invalide ou expiré');
+  }
+}
+
 
   async forgotPassword(forgotPasswordDto: ForgotPasswordDto) {
     const { telephone } = forgotPasswordDto;
@@ -535,8 +545,10 @@ async verifyPhoneAndRegister(verifyPhoneDto: VerifyPhoneDto) {
  
   return {
     user: userWithoutPassword,
-    access_token: tokens.accessToken,
-    refresh_token: tokens.refreshToken,
+    tokens: {
+      accessToken: tokens.accessToken,
+      refreshToken: tokens.refreshToken
+    }
   };
 }
 
