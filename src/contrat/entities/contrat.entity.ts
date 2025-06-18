@@ -67,7 +67,7 @@ export class Contrat {
     nullable: true,
     cascade: ['insert', 'update'],
   })
-  @JoinColumn()
+@JoinTable()
   utilisateur: Utilisateur[];
 
   @OneToMany(() => Presence, (presence) => presence.contrat)

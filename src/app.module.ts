@@ -11,7 +11,7 @@ import { CacheModule } from '@nestjs/cache-manager';
 import { redisStore } from 'cache-manager-redis-yet';
 import { TacheModule } from './tache/tache.module';
 import { EntrepriseModule } from './entreprise/entreprise.module';
-//import { ContractModule } from './contrat/contract.module';
+import { ContractModule } from './contrat/contract.module';
 
 @Module({
   imports: [
@@ -36,7 +36,7 @@ import { EntrepriseModule } from './entreprise/entreprise.module';
     AuthModule,
     TacheModule,
     EntrepriseModule,
-    //ContractModule,
+    ContractModule,
 
     // Cache avec Redis
     CacheModule.registerAsync({

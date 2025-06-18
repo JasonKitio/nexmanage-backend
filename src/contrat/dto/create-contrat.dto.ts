@@ -10,7 +10,7 @@ export class CreateContractDto {
   dateDebut: Date;
 
   @IsDateString()
-  dateFin: Date;
+  dateFin: Date;  
 
   @IsOptional()
   @IsString()
@@ -18,7 +18,7 @@ export class CreateContractDto {
 
  
   @IsOptional()
-  @IsString()
+  @IsNumber()
   pause?: number;
 
   @IsOptional()

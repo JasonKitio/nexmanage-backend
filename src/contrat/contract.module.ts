@@ -20,9 +20,6 @@ import { TwilioModule } from 'src/twillio/twillio.module';
 
 @Module({
   imports: [
-    // Configuration pour les variables d'environnement
-    ConfigModule,
-    
     // Configuration pour les tâches programmées (cron jobs)
     ScheduleModule.forRoot(),
     
@@ -31,7 +28,7 @@ import { TwilioModule } from 'src/twillio/twillio.module';
       Contrat,
       Presence,
       tache,
-      Utilisateur,
+      Utilisateur
       
     ]),TwilioModule
   ],
@@ -42,7 +39,6 @@ import { TwilioModule } from 'src/twillio/twillio.module';
   ],
   exports: [
     ContractService,
-    TwilioService,
    
   ],
 })

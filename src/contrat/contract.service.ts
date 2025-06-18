@@ -3,7 +3,6 @@ import {  Repository, IsNull, Between, LessThanOrEqual, MoreThanOrEqual, DeepPar
 import  { Contrat } from "./entities/contrat.entity"
 import  { tache } from "../tache/entities/tache.entity"
 import  { Utilisateur } from "../User/entities/utilisateur.entity"
-import  { Commentaire } from "./../commentaires/entities/commentaire.entity"
 import  { Presence } from "./../presence/entities/presence.entity"
 import  { TwilioService } from "../twillio/twillio.service"
 import { Cron } from "@nestjs/schedule"
@@ -18,31 +17,42 @@ import {
 } from "./dto/create-contrat.dto"
 import { StatutTache } from "src/utils/enums/enums"
 import { Point } from "src/utils/types/type"
+import { InjectRepository } from "@nestjs/typeorm"
 
 @Injectable()
 export class ContractService {
   constructor(
-    private contractRepository: Repository<Contrat>,
-    private tacheRepository: Repository<tache>,
-    private utilisateurRepository: Repository<Utilisateur>,
-    private commentaireRepository: Repository<Commentaire>,
-    private presenceRepository: Repository<Presence>,
-    private twilioService: TwilioService,
+     @InjectRepository(Contrat)
+    private readonly contractRepository: Repository<Contrat>,
+
+    @InjectRepository(tache)
+    private readonly tacheRepository: Repository<tache>,
+
+    @InjectRepository(Utilisateur)
+    private readonly utilisateurRepository: Repository<Utilisateur>,
+
+    @InjectRepository(Presence)
+    private readonly presenceRepository: Repository<Presence>,
+
+    private readonly twilioService: TwilioService,
   ) {}
 
   async findAll(): Promise<Contrat[]> {
     return this.contractRepository.find({
       where: { estGabarit: false },
-      relations: ["utilisateur", "taches", "equipements", "commentaires"],
+      relations: ["utilisateur", "taches"],
     })
   }
 
-  async findContractsByEmployeeId(employeeId: string): Promise<Contrat[]> {
-    return this.contractRepository.find({
-      where: { utilisateur: { idUtilisateur: employeeId } },
-      relations: ["utilisateur", "taches", "equipements", "commentaires"],
-    })
-  }
+async findContractsByEmployeeId(employeeId: string): Promise<Contrat[]> {
+  return this.contractRepository
+    .createQueryBuilder('contrat')
+    .leftJoinAndSelect('contrat.utilisateur', 'utilisateur')
+    .leftJoinAndSelect('contrat.taches', 'taches')
+    .where('utilisateur.idUtilisateur = :employeeId', { employeeId })
+    .getMany();
+}
+
 
   async findOne(id: string): Promise<Contrat> {
     const contract = await this.contractRepository.findOne({
@@ -50,10 +60,6 @@ export class ContractService {
       relations: [
         "utilisateur",
         "taches",
-        "equipements",
-        "commentaires",
-        "commentaires.emetteur",
-        "commentaires.destinataire",
       ],
     })
 
@@ -274,52 +280,53 @@ export class ContractService {
   }
 
   private async checkScheduleConflict(
-    utilisateurId: string,
-    horaireDebut: Date,
-    horaireFin: Date,
-    excludeContractId?: string,
-    timezone = "Europe/Paris",
-  ): Promise<void> {
-    if (!utilisateurId || !horaireDebut || !horaireFin) {
-      return
-    }
-
-    const debutUTC = this.convertToUTC(horaireDebut, timezone)
-    const finUTC = this.convertToUTC(horaireFin, timezone)
-
-    if (finUTC <= debutUTC) {
-      throw new ConflictException("L'heure de fin doit être postérieure à l'heure de début")
-    }
-
-    const queryBuilder = this.contractRepository
-      .createQueryBuilder("contract")
-      .where("contract.utilisateurId = :utilisateurId", { utilisateurId })
-      .andWhere("contract.horaireDebut IS NOT NULL")
-      .andWhere("contract.horaireFin IS NOT NULL")
-      .andWhere("(contract.horaireDebut < :horaireFin AND contract.horaireFin > :horaireDebut)", {
-        horaireDebut: debutUTC,
-        horaireFin: finUTC,
-      })
-
-    if (excludeContractId) {
-      queryBuilder.andWhere("contract.idContrat != :excludeContractId", { excludeContractId })
-    }
-
-    const conflictingContracts = await queryBuilder.getMany()
-
-    if (conflictingContracts.length > 0) {
-      const conflictDetails = conflictingContracts.map((contract) => ({
-        id: contract.idContrat,
-        debut: moment(contract.dateDebut).tz(timezone).format("DD/MM/YYYY HH:mm"),
-        fin: moment(contract.dateFin).tz(timezone).format("DD/MM/YYYY HH:mm"),
-        lieu: contract.lieu,
-      }))
-
-      throw new ConflictException(
-        `L'employé a déjà un contrat programmé pendant cette période. Conflits détectés: ${JSON.stringify(conflictDetails)}`,
-      )
-    }
+  utilisateurId: string,
+  horaireDebut: Date,
+  horaireFin: Date,
+  excludeContractId?: string,
+  timezone = "Europe/Paris",
+): Promise<void> {
+  if (!utilisateurId || !horaireDebut || !horaireFin) {
+    return;
   }
+
+  const debutUTC = this.convertToUTC(horaireDebut, timezone);
+  const finUTC = this.convertToUTC(horaireFin, timezone);
+
+  if (finUTC <= debutUTC) {
+    throw new ConflictException("L'heure de fin doit être postérieure à l'heure de début");
+  }
+
+  const queryBuilder = this.contractRepository
+    .createQueryBuilder("contract")
+    .leftJoin("contract.utilisateur", "utilisateur") // jointure avec la table utilisateur
+    .where("utilisateur.idUtilisateur = :utilisateurId", { utilisateurId }) // filtrage sur utilisateur via jointure
+    .andWhere("contract.dateDebut IS NOT NULL")
+    .andWhere("contract.dateFin IS NOT NULL")
+    .andWhere("(contract.dateDebut < :dateFin AND contract.dateFin > :dateDebut)", {
+      dateDebut: debutUTC,
+      dateFin: finUTC,
+    });
+
+  if (excludeContractId) {
+    queryBuilder.andWhere("contract.idContrat != :excludeContractId", { excludeContractId });
+  }
+
+  const conflictingContracts = await queryBuilder.getMany();
+
+  if (conflictingContracts.length > 0) {
+    const conflictDetails = conflictingContracts.map((contract) => ({
+      id: contract.idContrat,
+      debut: moment(contract.dateDebut).tz(timezone).format("DD/MM/YYYY HH:mm"),
+      fin: moment(contract.dateFin).tz(timezone).format("DD/MM/YYYY HH:mm"),
+      lieu: contract.lieu,
+    }));
+
+    throw new ConflictException(
+      `L'employé a déjà un contrat programmé pendant cette période. Conflits détectés: ${JSON.stringify(conflictDetails)}`,
+    );
+  }
+}
 
   async update(id: string, updateContractDto: UpdateContractDto, timezone = "Europe/Paris"): Promise<Contrat> {
     const contract = await this.findOne(id)
@@ -429,7 +436,7 @@ export class ContractService {
     return this.contractRepository.save(contract)
   }
 
-  private calculateDistance(lat1: number, lon1: number, lat2: number, lon2: number): number {
+private calculateDistance(lat1: number, lon1: number, lat2: number, lon2: number): number {
     const R = 6371000 // Rayon de la Terre en mètres
     const dLat = this.toRadians(lat2 - lat1)
     const dLon = this.toRadians(lon2 - lon1)
@@ -455,18 +462,21 @@ export class ContractService {
     // Vérifier si le contrat est actif
     const matchingContract = await this.contractRepository.findOne({
       where: {
-        utilisateur: { idUtilisateur: pointageDto.utilisateurId },
+        idContrat: contractId,
         dateDebut: LessThanOrEqual(now),
         dateFin: MoreThanOrEqual(now),
       },
+      relations: ['utilisateur'] // Charger les utilisateurs associés
     })
 
     if (!matchingContract) {
       throw new BadRequestException("Aucun contrat actif pour l'heure actuelle.")
     }
 
-    if (matchingContract.idContrat !== contract.idContrat) {
-      throw new BadRequestException("Vous essayez de pointer un contrat qui n'est pas actif actuellement.")
+    // Vérifier si l'utilisateur est assigné à ce contrat
+    const isUserAssigned = matchingContract.utilisateur?.some(u => u.idUtilisateur === pointageDto.utilisateurId)
+    if (!isUserAssigned) {
+      throw new BadRequestException("Vous n'êtes pas assigné à ce contrat.")
     }
 
     const user = await this.utilisateurRepository.findOne({
@@ -483,7 +493,7 @@ export class ContractService {
     }
 
     const [userLat, userLng] = pointageDto.localisation
-    const [contractLng, contractLat] = contract.lieu.coordinates;
+    const [ contractLat,contractLng] = contract.lieu.coordinates;
 
     const distance = this.calculateDistance(userLat, userLng, contractLat, contractLng)
 
@@ -493,10 +503,10 @@ export class ContractService {
       )
     }
 
-    // Vérifier s'il existe déjà un pointage sans heure de départ
+    // Vérifier s'il existe déjà un pointage sans heure de départ pour cet utilisateur
     const existingPresence = await this.presenceRepository.findOne({
       where: {
-        utilisateur: { idUtilisateur: user.idUtilisateur },
+        utilisateur: { idUtilisateur: pointageDto.utilisateurId },
         contrat: { idContrat: contract.idContrat },
         heureDepart: IsNull(),
       },
@@ -508,19 +518,19 @@ export class ContractService {
       existingPresence.heureDepart = currentTime
       existingPresence.localisationDepart = {
         type: "Point",
-       coordinates: pointageDto.localisation as [number, number],
-
+        coordinates: pointageDto.localisation as [number, number],
       }
 
+
       // Calculer les heures supplémentaires ou départ anticipé
-      const horaireFin = new Date(contract.dateFin)
+      const dateFin = new Date(contract.dateFin)
       const today = new Date(currentTime)
       const finPrevue = new Date(
         today.getFullYear(),
         today.getMonth(),
         today.getDate(),
-        horaireFin.getHours(),
-        horaireFin.getMinutes(),
+        dateFin.getHours(),
+        dateFin.getMinutes(),
       )
 
       const diffMilliseconds = currentTime.getTime() - finPrevue.getTime()
@@ -566,7 +576,6 @@ export class ContractService {
         }
       }
 
-
       return this.presenceRepository.save(existingPresence)
     } else {
       // Vérifier si l'utilisateur a déjà pointé aujourd'hui
@@ -578,7 +587,7 @@ export class ContractService {
 
       const hasPointedToday = await this.presenceRepository.findOne({
         where: {
-          utilisateur: { idUtilisateur: user.idUtilisateur },
+          utilisateur: { idUtilisateur: pointageDto.utilisateurId },
           contrat: { idContrat: contract.idContrat },
           heureArrivee: Between(today, tomorrow),
         },
@@ -600,6 +609,10 @@ export class ContractService {
           type: "Point",
           coordinates: pointageDto.localisation,
         },
+         localisationDepart: { // <-- Valeur par défaut
+    type: "Point",
+    coordinates: pointageDto.localisation, // Mêmes coordonnées que l'arrivée
+  },
         notes: pointageDto.notes,
       })
 
@@ -641,7 +654,6 @@ export class ContractService {
       return this.presenceRepository.save(presence)
     }
   }
-
   @Cron("0 */15 * * * *") // Toutes les 15 minutes
   async checkAndTerminateContracts() {
     console.log("Vérification des contrats à terminer automatiquement...")
@@ -650,8 +662,7 @@ export class ContractService {
 
     const contractsToTerminate = await this.contractRepository
       .createQueryBuilder("contract")
-      .where("contract.estTermine = :estTermine", { estTermine: false })
-      .andWhere("contract.horaireFin < :now", { now })
+      .andWhere("contract.dateFin < :now", { now })
       .getMany()
 
     for (const contract of contractsToTerminate) {

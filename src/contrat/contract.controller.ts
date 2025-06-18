@@ -1,6 +1,6 @@
-import { Controller, Get, Post, Patch, Param, Delete, Headers } from "@nestjs/common"
-import type { ContractService } from "./contract.service"
-import type {
+import { Controller, Get, Post, Patch, Param, Delete, Headers,Body } from "@nestjs/common"
+import  { ContractService } from "./contract.service"
+import  {
   CreateContractDto,
   UpdateContractDto,
   AddTaskToContractDto,
@@ -14,7 +14,7 @@ export class ContractController {
   constructor(private readonly contractService: ContractService) {}
 
   @Post()
-  async create(createContractDto: CreateContractDto, @Headers('timezone') timezone?: string) {
+  async create( @Body()createContractDto: CreateContractDto, @Headers('timezone') timezone?: string) {
     return this.contractService.create(createContractDto, timezone)
   }
 
@@ -70,12 +70,12 @@ export class ContractController {
   }
 
   @Post(":id/pointage")
-  async pointagePresence(@Param('id') id: string, pointageDto: PointageContratDto) {
+  async pointagePresence(@Param('id') id: string,  @Body() pointageDto: PointageContratDto,) {
     return this.contractService.pointagePresence(id, pointageDto)
   }
 
   @Post(":id/save-template")
-  async saveAsTemplate(@Param('id') id: string, saveDto: SaveAsTemplateDto) {
+  async saveAsTemplate(@Param('id') id: string,  @Body()  saveDto: SaveAsTemplateDto) {
     return this.contractService.saveAsTemplate(id, saveDto)
   }
 
