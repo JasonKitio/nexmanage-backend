@@ -326,4 +326,24 @@ async findByI(id: string): Promise<Utilisateur | null> {
       telephone: newPhone
     });
   }
+
+    async getMe(userId: string): Promise<Partial<Utilisateur>> {
+    const utilisateur = await this.userRepository.findOne({
+      where: { idUtilisateur: userId },
+      select: {
+        idUtilisateur: true,
+        nom: true,
+        email: true,
+        telephone: true,
+        role: true,
+        isActif: true,
+      },
+    });
+
+    if (!utilisateur) {
+      throw new NotFoundException('Utilisateur non trouvé');
+    }
+
+    return utilisateur;
+  }
 }

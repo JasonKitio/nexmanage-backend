@@ -46,6 +46,7 @@ export class EntrepriseController {
   }
 
   @Get()
+   @Roles(Role.ADMIN)
   async findAll(@Query() paginationDto: PaginationDto) {
     return this.entrepriseService.findAll(paginationDto);
   }

@@ -12,6 +12,7 @@ import { redisStore } from 'cache-manager-redis-yet';
 import { TacheModule } from './tache/tache.module';
 import { EntrepriseModule } from './entreprise/entreprise.module';
 import { ContractModule } from './contrat/contract.module';
+import { MessageModule } from './message/message.module';
 
 @Module({
   imports: [
@@ -38,6 +39,7 @@ import { ContractModule } from './contrat/contract.module';
     EntrepriseModule,
     ContractModule,
 
+
     // Cache avec Redis
     CacheModule.registerAsync({
       imports: [ConfigModule],
@@ -62,6 +64,9 @@ import { ContractModule } from './contrat/contract.module';
       inject: [ConfigService],
       isGlobal: true,
     }),
+
+
+    MessageModule,
   ],
   controllers: [AppController],
   providers: [AppService],

@@ -92,17 +92,14 @@ export class AddTaskToContractDto {
 }
 
 
-export class CreateCommentDto {
+export class CreateCommentDto  {
   @IsString()
   @IsNotEmpty()
-  contenu: string;
-
-  @IsUUID()
-  emetteurId: string;
+  message: string;
 
   @IsOptional()
-  @IsUUID()
-  destinataireId?: string;
+  @IsString()
+  fichierJoint?: string;
 }
 
 export class SaveAsTemplateDto {

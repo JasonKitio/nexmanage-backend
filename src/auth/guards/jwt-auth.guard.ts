@@ -1,57 +1,83 @@
-// guards/jwt-auth.guard.ts
-import {
-  Injectable,
-  ExecutionContext,
-  UnauthorizedException
-} from '@nestjs/common';
-import { AuthGuard } from '@nestjs/passport';
-import { JwtService } from '@nestjs/jwt';
-import { ConfigService } from '@nestjs/config';
-import { Request } from 'express';
+import { Injectable,  CanActivate,  ExecutionContext, UnauthorizedException, Logger } from "@nestjs/common"
+import  { JwtService } from "@nestjs/jwt"
+import  { ConfigService } from "@nestjs/config"
+import  { CacheService } from "../../cache/cache.service"
+import  { Request } from "express"
 
 @Injectable()
-export class JwtAuthGuard extends AuthGuard('jwt') {
+export class JwtAuthGuard implements CanActivate {
+  private readonly logger = new Logger(JwtAuthGuard.name)
+
   constructor(
-    private jwtService: JwtService,
-    private configService: ConfigService
-  ) {
-    super();
-  }
+    private readonly jwtService: JwtService,
+    private readonly configService: ConfigService,
+    private readonly cacheService: CacheService,
+  ) {}
 
-  canActivate(context: ExecutionContext) {
-    const request = context.switchToHttp().getRequest<Request>();
+  async canActivate(context: ExecutionContext): Promise<boolean> {
+    const request = context.switchToHttp().getRequest<Request>()
 
-    const token =
-      this.extractTokenFromCookie(request) ||
-      this.extractTokenFromHeader(request);
+    // Extraire le token depuis les cookies ou l'en-tête
+    const token = this.extractTokenFromCookie(request) || this.extractTokenFromHeader(request)
 
     if (!token) {
-      throw new UnauthorizedException('Token manquant');
+      this.logger.warn("Aucun token trouvé dans les cookies ou en-têtes")
+      throw new UnauthorizedException("Token d'accès manquant")
     }
 
     try {
+      // Vérifier si le token est dans la blacklist
+      const isBlacklisted = await this.cacheService.get(`blacklist_${token}`)
+      if (isBlacklisted) {
+        this.logger.warn("Token dans la blacklist")
+        throw new UnauthorizedException("Token révoqué")
+      }
+
+      // Vérifier et décoder le token
       const payload = this.jwtService.verify(token, {
-        secret: this.configService.get<string>('JWT_SECRET'),
-      });
+        secret: this.configService.get("JWT_SECRET"),
+      })
 
       // Ajouter le payload à l'objet request
-      request['user'] = payload;
-    } catch (err) {
-      throw new UnauthorizedException('Token invalide ou expiré');
-    }
+      request["user"] = payload
 
-    return true;
+      this.logger.debug(`Token valide pour l'utilisateur: ${payload.sub}`)
+      return true
+    } catch (error) {
+      this.logger.error("Erreur de vérification du token:", error.message)
+
+      if (error.name === "TokenExpiredError") {
+        throw new UnauthorizedException("Token expiré")
+      } else if (error.name === "JsonWebTokenError") {
+        throw new UnauthorizedException("Token invalide")
+      } else {
+        throw new UnauthorizedException("Erreur d'authentification")
+      }
+    }
   }
 
   private extractTokenFromCookie(request: Request): string | undefined {
-    return request.cookies?.['access_token'];
+    // Vérifier les cookies avec différents noms possibles
+    const token =
+      request.cookies?.["accessToken"] || request.cookies?.["access_token"] || request.cookies?.["Authorization"]
+
+    if (token) {
+      this.logger.debug("Token trouvé dans les cookies")
+    }
+
+    return token
   }
 
   private extractTokenFromHeader(request: Request): string | undefined {
-    const authHeader = request.headers.authorization;
-    if (!authHeader) return undefined;
+    const authHeader = request.headers.authorization
+    if (!authHeader) return undefined
 
-    const [type, token] = authHeader.split(' ');
-    return type === 'Bearer' ? token : undefined;
+    const [type, token] = authHeader.split(" ")
+    if (type === "Bearer" && token) {
+      this.logger.debug("Token trouvé dans l'en-tête Authorization")
+      return token
+    }
+
+    return undefined
   }
 }

@@ -23,4 +23,7 @@ export class Commentaire {
 
   @CreateDateColumn({ type: 'timestamp' })
   dateCreation: Date;
+
+   @Column({ nullable: true })
+  fichierJoint: string;
 }

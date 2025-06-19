@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Patch, Param, Delete, Headers,Body } from "@nestjs/common"
+import { Controller, Get, Post, Patch, Param, Delete, Headers,Body, UseInterceptors, UploadedFile, Res, HttpStatus , UseGuards} from "@nestjs/common"
 import  { ContractService } from "./contract.service"
 import  {
   CreateContractDto,
@@ -7,8 +7,19 @@ import  {
   PointageContratDto,
   SaveAsTemplateDto,
   CreateFromTemplateDto,
+  CreateCommentDto,
 } from "./dto/create-contrat.dto"
+import { FileInterceptor } from "@nestjs/platform-express"
+import { diskStorage } from "multer"
+import { extname } from "path"
+import { Response } from 'express';
+import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { RolesGuard } from '../auth/guards/roles.guard';
+import { Roles } from '../auth/decorators/roles.decorator';
+import { Role } from '../utils/enums/enums';
 
+
+@UseGuards(JwtAuthGuard, RolesGuard)
 @Controller("contracts")
 export class ContractController {
   constructor(private readonly contractService: ContractService) {}
@@ -69,6 +80,53 @@ export class ContractController {
     return this.contractService.addTaskToContract(id, addTaskDto)
   }
 
+  @Post(':id/commentaire')
+@UseInterceptors(
+  FileInterceptor('file', {
+    storage: diskStorage({
+      destination: './uploads/commentaire',
+      filename: (req, file, cb) => {
+        const randomName = Array(32)
+          .fill(null)
+          .map(() => Math.round(Math.random() * 16).toString(16))
+          .join('');
+        return cb(null, `${randomName}${extname(file.originalname)}`);
+      },
+    }),
+  }),
+)
+async addComment(
+  @Param('id') id: string,
+  @Body() commentDto: CreateCommentDto,
+  @UploadedFile() file,
+  @Res() res: Response,
+) {
+  try {
+    // Si un fichier est téléchargé, mettre à jour le DTO avec le chemin du fichier
+    if (file) {
+      commentDto.fichierJoint = file.path;
+    }
+    
+    const commentaire = await this.contractService.addCommentToContract(id, commentDto);
+    
+    return res.json({
+    success: true,
+     commentaire,
+  });
+  } catch (error) {
+    if (error.name === 'NotFoundException') {
+      return res.status(HttpStatus.NOT_FOUND).json({
+        success: false,
+        message: error.message,
+      });
+    }
+    return res.status(HttpStatus.INTERNAL_SERVER_ERROR).json({
+      success: false,
+      message: error.message,
+    });
+  }
+}
+
   @Post(":id/pointage")
   async pointagePresence(@Param('id') id: string,  @Body() pointageDto: PointageContratDto,) {
     return this.contractService.pointagePresence(id, pointageDto)
@@ -77,6 +135,35 @@ export class ContractController {
   @Post(":id/save-template")
   async saveAsTemplate(@Param('id') id: string,  @Body()  saveDto: SaveAsTemplateDto) {
     return this.contractService.saveAsTemplate(id, saveDto)
+  }
+
+   @Get('entreprise/:entrepriseId')
+  async getContractsByEntreprise(
+    @Param('entrepriseId') entrepriseId: string,
+    @Res() res: Response,
+  ) {
+    try {
+      const contrats = await this.contractService.getContractsByEntreprise(entrepriseId);
+      
+      return res.json({
+        success: true,
+        data: contrats,
+        count: contrats.length,
+        message: `${contrats.length} contrat(s) trouvé(s) pour l'entreprise`,
+      });
+    } catch (error) {
+      if (error.name === 'NotFoundException') {
+        return res.status(HttpStatus.NOT_FOUND).json({
+          success: false,
+          message: error.message,
+        });
+      }
+      return res.status(HttpStatus.INTERNAL_SERVER_ERROR).json({
+        success: false,
+        message: 'Erreur lors de la récupération des contrats de l\'entreprise',
+        error: error.message,
+      });
+    }
   }
 
   @Post("from-template")

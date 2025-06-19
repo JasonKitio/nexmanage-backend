@@ -16,6 +16,7 @@ import { ConfigService } from '@nestjs/config';
 import { UpdatePhoneDto } from './dto/updatePhone.dto';
 import { VerifyPhoneDto } from './dto/VerifyPhone.dto';
 import { UpdatePasswordDto } from './dto/updatePassword.dto';
+import { Entreprise } from 'src/entreprise/entities/entreprise.entity';
 
 
 
@@ -664,4 +665,6 @@ async verifyPhoneAndRegister(verifyPhoneDto: VerifyPhoneDto) {
 
     return { message: 'Nouveau code de vérification envoyé' };
   }
+
+  
 }

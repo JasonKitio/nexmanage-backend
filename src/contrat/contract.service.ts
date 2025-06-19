@@ -14,16 +14,25 @@ import {
   PointageContratDto,
   SaveAsTemplateDto,
   CreateFromTemplateDto,
+  CreateCommentDto 
 } from "./dto/create-contrat.dto"
 import { StatutTache } from "src/utils/enums/enums"
 import { Point } from "src/utils/types/type"
 import { InjectRepository } from "@nestjs/typeorm"
+import { Commentaire } from "src/commentaires/entities/commentaire.entity"
+import { UtilisateurEntreprise } from '../UtilisateurEntreprise/entities/utilisateur-entreprise.entity';
+import { Entreprise } from '../entreprise/entities/entreprise.entity';
 
 @Injectable()
 export class ContractService {
   constructor(
      @InjectRepository(Contrat)
     private readonly contractRepository: Repository<Contrat>,
+
+     @InjectRepository(UtilisateurEntreprise)
+    private utilisateurEntrepriseRepository: Repository<UtilisateurEntreprise>,
+    @InjectRepository(Entreprise)
+    private entrepriseRepository: Repository<Entreprise>,
 
     @InjectRepository(tache)
     private readonly tacheRepository: Repository<tache>,
@@ -33,6 +42,9 @@ export class ContractService {
 
     @InjectRepository(Presence)
     private readonly presenceRepository: Repository<Presence>,
+
+     @InjectRepository(Commentaire)
+    private readonly commentaireRepository: Repository<Commentaire>,
 
     private readonly twilioService: TwilioService,
   ) {}
@@ -69,6 +81,44 @@ async findContractsByEmployeeId(employeeId: string): Promise<Contrat[]> {
 
     return contract
   }
+
+    async getContractsByEntreprise(entrepriseId: string): Promise<Contrat[]> {
+    // Vérifier si l'entreprise existe
+    const entreprise = await this.entrepriseRepository.findOne({
+      where: { idEntreprise: entrepriseId },
+    });
+
+    if (!entreprise) {
+      throw new NotFoundException(`Entreprise avec l'ID ${entrepriseId} non trouvée`);
+    }
+
+    // Récupérer tous les utilisateurs de l'entreprise
+    const utilisateursEntreprise = await this.utilisateurEntrepriseRepository.find({
+      where: { entreprise: { idEntreprise: entrepriseId } },
+      relations: ['utilisateur'],
+    });
+
+    if (utilisateursEntreprise.length === 0) {
+      return []; // Aucun utilisateur dans l'entreprise, donc aucun contrat
+    }
+
+    // Extraire les IDs des utilisateurs
+    const utilisateurIds = utilisateursEntreprise.map(ue => ue.utilisateur.idUtilisateur);
+
+    // Récupérer tous les contrats où au moins un utilisateur de l'entreprise est affecté
+    const contrats = await this.contractRepository
+      .createQueryBuilder('contrat')
+      .leftJoinAndSelect('contrat.utilisateur', 'utilisateur')
+      .leftJoinAndSelect('contrat.taches', 'taches')
+      .leftJoinAndSelect('contrat.presence', 'presence')
+      .leftJoinAndSelect('contrat.comment', 'comment')
+      .where('utilisateur.idUtilisateur IN (:...utilisateurIds)', { utilisateurIds })
+      .orderBy('contrat.dateCreation', 'DESC')
+      .getMany();
+
+    return contrats;
+  }
+
 
   async create(createContractDto: CreateContractDto, timezone = "Europe/Paris"): Promise<Contrat[]> {
     const createdContracts: Contrat[] = []
@@ -435,6 +485,57 @@ async findContractsByEmployeeId(employeeId: string): Promise<Contrat[]> {
     contract.taches.push(task)
     return this.contractRepository.save(contract)
   }
+
+  async addCommentToContract(contractId: string, commentDto: CreateCommentDto): Promise<Commentaire> {
+  // Récupérer le contrat avec les utilisateurs affectés
+  const contract = await this.contractRepository.findOne({
+    where: { idContrat: contractId },
+    relations: ['utilisateur'], // Charger la relation avec les utilisateurs
+  });
+  
+  // Vérification si le contrat existe
+  if (!contract) {
+    throw new NotFoundException(`Contrat avec l'ID ${contractId} non trouvé`);
+  }
+
+  // Création du commentaire avec la nouvelle structure
+  const commentaire = this.commentaireRepository.create({
+    message: commentDto.message, // Utilise le champ 'message' au lieu de 'contenu'
+    fichierJoint: commentDto.fichierJoint, // Ajout du fichier joint optionnel
+    contrat: contract, // Relation avec le contrat
+   
+  });
+
+  // Sauvegarde du commentaire
+  const savedComment = await this.commentaireRepository.save(commentaire);
+  
+  // Notification SMS aux utilisateurs affectés au contrat
+  try {
+    if (contract.utilisateur && contract.utilisateur.length > 0) {
+      const messageBody = `Nouveau commentaire sur le contrat: "${commentDto.message}"`;
+      
+      // Envoyer SMS à tous les utilisateurs affectés au contrat
+      const smsPromises = contract.utilisateur.map(async (utilisateur) => {
+        if (utilisateur.telephone) { // Vérifier que l'utilisateur a un numéro de téléphone
+          try {
+            await this.twilioService.sendSMS(utilisateur.telephone, messageBody);
+          } catch (error) {
+            console.error(`Erreur envoi SMS à ${utilisateur.telephone}:`, error.message);
+            // Continue avec les autres utilisateurs même si un envoi échoue
+          }
+        }
+      });
+      
+      // Attendre que tous les SMS soient envoyés (ou échouent)
+      await Promise.allSettled(smsPromises);
+    }
+  } catch (error) {
+    console.error('Erreur lors de l\'envoi des notifications SMS:', error.message);
+    // Ne pas faire échouer la création du commentaire si les SMS échouent
+  }
+  
+  return savedComment;
+}
 
 private calculateDistance(lat1: number, lon1: number, lat2: number, lon2: number): number {
     const R = 6371000 // Rayon de la Terre en mètres
