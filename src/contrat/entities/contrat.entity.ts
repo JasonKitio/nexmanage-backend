@@ -67,7 +67,7 @@ export class Contrat {
     nullable: true,
     cascade: ['insert', 'update'],
   })
-  @JoinColumn()
+@JoinTable()
   utilisateur: Utilisateur[];
 
   @OneToMany(() => Presence, (presence) => presence.contrat)
@@ -75,4 +75,5 @@ export class Contrat {
 
   @OneToMany(() => Commentaire, (comment) => comment.contrat)
   comment: Commentaire[];
+    contract: { type: "Point"; coordinates: [number, number]; };
 }

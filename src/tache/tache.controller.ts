@@ -11,6 +11,7 @@ import {
   ParseUUIDPipe,
   HttpStatus,
   HttpCode,
+  UseGuards
 } from '@nestjs/common';
 import { Response } from 'express';
 import { TacheService } from './tache.service';
@@ -18,7 +19,12 @@ import { CreateTacheDto } from './dto/create-tache.dto';
 import { UpdateTacheDto } from './dto/update-tache.dto';
 import { QueryTacheDto } from './dto/query-tache.dto';
 import { Priorite, StatutTache } from 'src/utils/enums/enums';
+import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { RolesGuard } from '../auth/guards/roles.guard';
+import { Roles } from '../auth/decorators/roles.decorator';
+import { Role } from '../utils/enums/enums';
 
+@UseGuards(JwtAuthGuard, RolesGuard)
 @Controller('taches')
 export class TacheController {
   constructor(private readonly tacheService: TacheService) {}

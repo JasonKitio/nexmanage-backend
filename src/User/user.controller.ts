@@ -1,8 +1,14 @@
-import { Controller, Get, Post, Delete, Patch, Param, Query, Body, HttpCode, HttpStatus, ParseUUIDPipe } from '@nestjs/common';
+import { Controller, Get, Post, Delete, Patch, Param, Query, Body, HttpCode, HttpStatus, ParseUUIDPipe,UseGuards } from '@nestjs/common';
 import { UsersService } from './user.service';
 import { FilterUsersDto } from './dto/filter-users.dto';
 import { ApiTags, ApiOperation, ApiResponse, ApiQuery, ApiParam } from '@nestjs/swagger';
-import { UpdateUtilisateurDto } from './dto/updateUtilisateur.dto';
+import { UpdateUtilisateurDto } from './dto/updateUtilisateur.dto';import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { RolesGuard } from '../auth/guards/roles.guard';
+import { Roles } from '../auth/decorators/roles.decorator';
+import { Role } from '../utils/enums/enums';
+import { Request } from '@nestjs/common';
+
+@UseGuards(JwtAuthGuard, RolesGuard)
 
 @ApiTags('users')
 @Controller('users')
@@ -26,6 +32,31 @@ export class UsersController {
   @Get('all')
   async findAllWithDeleted(@Query() filterDto: FilterUsersDto) {
     return await this.usersService.findAllWithDeleted(filterDto);
+  }
+
+   @Get('me')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Récupérer les informations de l\'utilisateur connecté' })
+  @ApiResponse({
+    status: 200,
+    description: 'Informations de l\'utilisateur récupérées avec succès',
+  })
+  @ApiResponse({
+    status: 401,
+    description: 'Non autorisé - Token invalide',
+  })
+  @ApiResponse({
+    status: 404,
+    description: 'Utilisateur non trouvé',
+  })
+  async getMe(@Request() req) {
+    const utilisateur = await this.usersService.getMe(req.user.sub);
+    
+    return {
+      success: true,
+      message: 'Informations de l\'utilisateur récupérées avec succès',
+      data: utilisateur,
+    };
   }
 
   // Récupérer un utilisateur par ID (seulement s'il n'est pas supprimé)
@@ -70,4 +101,6 @@ export class UsersController {
       user 
     };
   }
+
+  
 }
