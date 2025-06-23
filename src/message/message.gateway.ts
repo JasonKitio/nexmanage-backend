@@ -5,6 +5,7 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { MessageService } from './message.service';
 import { CreateMessageDto } from './dto/create-message.dto';
 
+
 @WebSocketGateway({
   cors: {
     origin: '*',

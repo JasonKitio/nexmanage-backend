@@ -16,6 +16,7 @@ import { Entreprise } from '../entreprise/entities/entreprise.entity';
 import { ContractService } from './contract.service';
 import { TwilioService } from '../twillio/twillio.service';
 import { AuthModule } from 'src/auth/auth.module';
+import { NotificationService } from './configugation.service';
 
 // Controllers
 import { ContractController } from './contract.controller';
@@ -42,6 +43,7 @@ import { TwilioModule } from 'src/twillio/twillio.module';
   providers: [
     ContractService,
     TwilioService,
+    NotificationService
   ],
   exports: [
     ContractService,

@@ -22,6 +22,7 @@ import { InjectRepository } from "@nestjs/typeorm"
 import { Commentaire } from "src/commentaires/entities/commentaire.entity"
 import { UtilisateurEntreprise } from '../UtilisateurEntreprise/entities/utilisateur-entreprise.entity';
 import { Entreprise } from '../entreprise/entities/entreprise.entity';
+import {NotificationService} from './configugation.service'
 
 @Injectable()
 export class ContractService {
@@ -47,6 +48,7 @@ export class ContractService {
     private readonly commentaireRepository: Repository<Commentaire>,
 
     private readonly twilioService: TwilioService,
+      private notificationService: NotificationService,
   ) {}
 
   async findAll(): Promise<Contrat[]> {
@@ -120,7 +122,7 @@ async findContractsByEmployeeId(employeeId: string): Promise<Contrat[]> {
   }
 
 
-  async create(createContractDto: CreateContractDto, timezone = "Europe/Paris"): Promise<Contrat[]> {
+  async create(createContractDto: CreateContractDto, timezone = "Africa/Douala"): Promise<Contrat[]> {
     const createdContracts: Contrat[] = []
 
     // Si plusieurs utilisateurs sont spécifiés, créer un contrat pour chacun
@@ -303,12 +305,23 @@ async findContractsByEmployeeId(employeeId: string): Promise<Contrat[]> {
   }
 
   private async sendContractNotificationSMS(utilisateur: Utilisateur, contract: Contrat): Promise<void> {
+     let locationName;
+try {
+  const coords = contract.lieu?.coordinates;
+  locationName = coords ? await this.notificationService.getLocationName(coords) : 'Lieu non spécifié';
+} catch (error) {
+  console.error('Impossible de résoudre le nom du lieu, utilisation des coordonnées brutes', error);
+  locationName = contract.lieu?.coordinates
+    ? `${contract.lieu.coordinates[0]}, ${contract.lieu.coordinates[1]}`
+    : 'Lieu non spécifié';
+}
+
     if (!utilisateur.telephone) {
       console.log(`Pas de numéro de téléphone pour l'utilisateur ${utilisateur.idUtilisateur}`)
       return
     }
 
-   const message = `Nouveau contrat assigné: ${utilisateur.nom} le ${moment(contract.dateDebut).format("DD/MM/YYYY à HH:mm")} et ce termine le ${moment(contract.dateFin).format("DD/MM/YYYY à HH:mm")}. Lieu: ${contract.lieu.coordinates.join(", ")}`;
+   const message = `Nouveau contrat assigné: ${utilisateur.nom} le ${moment(contract.dateDebut).format("DD/MM/YYYY à HH:mm")} et ce termine le ${moment(contract.dateFin).format("DD/MM/YYYY à HH:mm")}. Lieu: ${locationName}`;
 
 
     await this.twilioService.sendSMS(utilisateur.telephone, message)
@@ -325,7 +338,7 @@ async findContractsByEmployeeId(employeeId: string): Promise<Contrat[]> {
     )
   }
 
-  private convertToUTC(date: Date | string, timezone = "Europe/Paris"): Date {
+  private convertToUTC(date: Date | string, timezone = "Africa/Douala"): Date {
     return moment.tz(date, timezone).utc().toDate()
   }
 
@@ -334,7 +347,7 @@ async findContractsByEmployeeId(employeeId: string): Promise<Contrat[]> {
   horaireDebut: Date,
   horaireFin: Date,
   excludeContractId?: string,
-  timezone = "Europe/Paris",
+  timezone = "Africa/Douala",
 ): Promise<void> {
   if (!utilisateurId || !horaireDebut || !horaireFin) {
     return;
@@ -378,7 +391,7 @@ async findContractsByEmployeeId(employeeId: string): Promise<Contrat[]> {
   }
 }
 
-  async update(id: string, updateContractDto: UpdateContractDto, timezone = "Europe/Paris"): Promise<Contrat> {
+  async update(id: string, updateContractDto: UpdateContractDto, timezone = "Africa/Douala"): Promise<Contrat> {
     const contract = await this.findOne(id)
 
     const updatedData = { ...contract }
@@ -454,7 +467,7 @@ async findContractsByEmployeeId(employeeId: string): Promise<Contrat[]> {
     await this.contractRepository.remove(contract)
   }
 
-  formatContractForDisplay(contract: Contrat, timezone = "Europe/Paris"): any {
+  formatContractForDisplay(contract: Contrat, timezone = "Africa/Douala"): any {
     return {
       ...contract,
       horaireDebut: contract.dateDebut
@@ -615,12 +628,18 @@ private calculateDistance(lat1: number, lon1: number, lat2: number, lon2: number
 
     if (existingPresence) {
       // Pointage de départ
-      const currentTime = pointageDto.heureDepart ? new Date(pointageDto.heureDepart) : new Date()
-      existingPresence.heureDepart = currentTime
-      existingPresence.localisationDepart = {
-        type: "Point",
-        coordinates: pointageDto.localisation as [number, number],
-      }
+const currentTime = new Date()
+const presence = this.presenceRepository.create({
+  utilisateur: user,
+  contrat: contract,
+  heureArrivee: currentTime,
+  localisationArrivee: {
+    type: "Point",
+    coordinates: pointageDto.localisation,
+  },
+ 
+  notes: pointageDto.notes,
+})
 
 
       // Calculer les heures supplémentaires ou départ anticipé

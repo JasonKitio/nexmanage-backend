@@ -50,6 +50,10 @@ export class EntrepriseController {
   async findAll(@Query() paginationDto: PaginationDto) {
     return this.entrepriseService.findAll(paginationDto);
   }
+   @Get('my-companies')
+  getMyCompanies(@Req() req, @Query() paginationDto: PaginationDto) {
+    return this.entrepriseService.getMyCompanies(req.user.idUtilisateur, paginationDto);
+  }
 
   @Get('deleted')
   @Roles(Role.ADMIN)
@@ -78,6 +82,9 @@ export class EntrepriseController {
   ) {
     return this.entrepriseService.update(id, updateEntrepriseDto, req.user.idUtilisateur);
   }
+
+  
+
 
 @Patch(':id/assign-manager')
   @Roles(Role.ADMIN, Role.MANAGER)
