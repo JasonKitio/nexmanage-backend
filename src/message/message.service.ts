@@ -6,6 +6,7 @@ import { CreateMessageDto } from './dto/create-message.dto';
 
 @Injectable()
 export class MessageService {
+  websocketGateway: any;
   constructor(
     @InjectRepository(Message)
     private messageRepository: Repository<Message>,
@@ -46,5 +47,46 @@ if (message) {
   throw new Error('Message not found');
 }
     return this.messageRepository.save(message);
+  }
+
+
+    async createMessage(
+    expediteurId: string,
+    destinataireId: string,
+    contenu: string,
+  ): Promise<Message> {
+    const message = this.messageRepository.create({
+      expediteurId,
+      destinataireId,
+      contenu,
+    });
+
+    const savedMessage = await this.messageRepository.save(message);
+
+    // Envoyer la notification en temps réel
+    const notification = {
+      id: savedMessage.id,
+      contenu: savedMessage.contenu,
+      dateEnvoi: savedMessage.dateEnvoi,
+      expediteurId: savedMessage.expediteurId,
+      type: 'MESSAGE',
+    };
+
+    this.websocketGateway.sendNotificationToUser(destinataireId, notification);
+
+    return savedMessage;
+  }
+    async getMessagesForUser(userId: string): Promise<Message[]> {
+    return await this.messageRepository.find({
+      where: { destinataireId: userId },
+      relations: ['expediteur'],
+      order: { dateEnvoi: 'DESC' },
+    });
+  }
+
+  async getUnreadCount(userId: string): Promise<number> {
+    return await this.messageRepository.count({
+      where: { destinataireId: userId, lu: false },
+    });
   }
 }

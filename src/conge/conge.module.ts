@@ -1,0 +1,21 @@
+import { Module } from '@nestjs/common';
+import { TypeOrmModule } from '@nestjs/typeorm';
+import { CongeService } from './conge.service';
+import { CongeController } from './conge.controller';
+import { Conge } from './entities/conge.entity';
+import { Utilisateur } from 'src/User/entities/utilisateur.entity';
+import { UtilisateurEntreprise } from 'src/UtilisateurEntreprise/entities/utilisateur-entreprise.entity';
+import { NotificationService } from './notification.service';
+import { MessageModule } from 'src/message/message.module';
+
+@Module({
+  imports: [
+    TypeOrmModule.forFeature([Conge, Utilisateur, UtilisateurEntreprise]),
+    MessageModule,
+    
+  ],
+  controllers: [CongeController],
+  providers: [CongeService, NotificationService],
+  exports: [CongeService],
+})
+export class CongeModule {}

@@ -22,10 +22,10 @@ export class Presence {
   @JoinColumn({ name: 'contratId' })
   contrat: Contrat;
 
-  @Column({ type: 'timestamp' })
+  @Column({ type: 'timestamptz', nullable: true })
   heureArrivee: Date;
 
-  @Column({ type: 'timestamp', nullable: true })
+  @Column({ type: 'timestamptz', nullable: true })
   heureDepart: Date;
 
   //position de pointage arrivee

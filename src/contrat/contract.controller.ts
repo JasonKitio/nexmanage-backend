@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Patch, Param, Delete, Headers,Body, UseInterceptors, UploadedFile, Res, HttpStatus , UseGuards} from "@nestjs/common"
+import { Controller, Get, Post, Patch, Param, Delete, Headers,Body, UseInterceptors, UploadedFile, Res, HttpStatus , UseGuards, HttpCode, ParseUUIDPipe, ValidationPipe, Query} from "@nestjs/common"
 import  { ContractService } from "./contract.service"
 import  {
   CreateContractDto,
@@ -17,8 +17,12 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { Role } from '../utils/enums/enums';
+import { ApiTags,ApiBody, ApiOperation, ApiParam, ApiQuery, ApiResponse } from '@nestjs/swagger';
+import RemoveUsersFromContractDto from './dto/RemoveUsersFromContract.dto';
+import AddUsersToContractDto from "./dto/AddUsersToContract.dto"
+import { Contrat } from "./entities/contrat.entity"
 
-
+@ApiTags('contracts')
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Controller("contracts")
 export class ContractController {
@@ -78,6 +82,57 @@ export class ContractController {
   @Post(":id/tasks")
   async addTaskToContract(@Param('id') id: string, addTaskDto: AddTaskToContractDto) {
     return this.contractService.addTaskToContract(id, addTaskDto)
+  }
+
+    @Post(':id/users')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ 
+    summary: 'Ajouter des utilisateurs à un contrat',
+    description: 'Permet d\'ajouter un ou plusieurs utilisateurs à un contrat existant. Vérifie les conflits d\'horaire avant l\'ajout.'
+  })
+  @ApiParam({
+    name: 'id',
+    description: 'ID du contrat',
+    type: 'string',
+    example: 'contract-123-456'
+  })
+  @ApiQuery({
+    name: 'timezone',
+    description: 'Fuseau horaire pour les vérifications d\'horaire',
+    required: false,
+    example: 'Africa/Douala'
+  })
+  @ApiBody({
+    description: 'Liste des IDs des utilisateurs à ajouter',
+    type: AddUsersToContractDto
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Utilisateurs ajoutés avec succès au contrat',
+    type: Contrat
+  })
+  @ApiResponse({
+    status: 404,
+    description: 'Contrat introuvable ou un ou plusieurs utilisateurs introuvables'
+  })
+  @ApiResponse({
+    status: 409,
+    description: 'Conflit d\'horaire détecté ou utilisateur déjà assigné'
+  })
+  @ApiResponse({
+    status: 400,
+    description: 'Données invalides'
+  })
+  async addUsersToContract(
+    @Param('id', ParseUUIDPipe) contractId: string,
+    @Body(ValidationPipe) addUsersDto: AddUsersToContractDto,
+    @Query('timezone') timezone: string = 'Africa/Douala'
+  ): Promise<Contrat> {
+    return await this.contractService.addUsersToContract(
+      contractId,
+      addUsersDto.utilisateursIds,
+      timezone
+    );
   }
 
   @Post(':id/commentaire')
@@ -169,5 +224,44 @@ async addComment(
   @Post("from-template")
   async createFromTemplate(createDto: CreateFromTemplateDto) {
     return this.contractService.createFromTemplate(createDto)
+  }
+
+  @Delete(':id/users')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ 
+    summary: 'Retirer des utilisateurs d\'un contrat',
+    description: 'Permet de retirer un ou plusieurs utilisateurs d\'un contrat existant.'
+  })
+  @ApiParam({
+    name: 'id',
+    description: 'ID du contrat',
+    type: 'string',
+    example: 'contract-123-456'
+  })
+  @ApiBody({
+    description: 'Liste des IDs des utilisateurs à retirer',
+    type: RemoveUsersFromContractDto
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Utilisateurs retirés avec succès du contrat',
+    type: Contrat
+  })
+  @ApiResponse({
+    status: 404,
+    description: 'Contrat introuvable'
+  })
+  @ApiResponse({
+    status: 400,
+    description: 'Aucun utilisateur assigné à ce contrat ou données invalides'
+  })
+  async removeUsersFromContract(
+    @Param('id', ParseUUIDPipe) contractId: string,
+    @Body(ValidationPipe) removeUsersDto: RemoveUsersFromContractDto
+  ): Promise<Contrat> {
+    return await this.contractService.removeUsersFromContract(
+      contractId,
+      removeUsersDto.utilisateursIds
+    );
   }
 }

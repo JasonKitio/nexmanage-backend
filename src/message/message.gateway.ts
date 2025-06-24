@@ -45,4 +45,19 @@ export class MessageGateway {
     const message = await this.messageService.markAsRead(messageId);
     return { event: 'messageRead', data: message };
   }
+
+   sendNotificationToUser(userId: string, notification: any) {
+    const room = `user_${userId}`;
+    this.server.to(room).emit('nouvelle_notification', notification);
+    console.log(`Notification envoyée à l'utilisateur ${userId}:`, notification);
+  }
+
+  // Envoyer une notification à tous les admins d'une entreprise
+  sendNotificationToCompanyAdmins(adminIds: string[], notification: any) {
+    adminIds.forEach(adminId => {
+      this.sendNotificationToUser(adminId, notification);
+    });
+  }
+
+
 }
