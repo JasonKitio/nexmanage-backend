@@ -3,13 +3,15 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Message } from './entities/message.entity';
 import { CreateMessageDto } from './dto/create-message.dto';
+import { MessageGateway } from './message.gateway';
 
 @Injectable()
 export class MessageService {
-  websocketGateway: any;
+
   constructor(
     @InjectRepository(Message)
     private messageRepository: Repository<Message>,
+     private websocketGateway: MessageGateway,
   ) {}
 
   async create(createMessageDto: CreateMessageDto): Promise<Message> {

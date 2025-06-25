@@ -6,7 +6,7 @@ import { MessageGateway } from '../message/message.gateway';
 export class NotificationService {
   constructor(
     private messageService: MessageService,
-    private websocketGateway: MessageGateway,
+    private readonly websocketGateway: MessageGateway,
   ) {}
 
   async sendNotification(

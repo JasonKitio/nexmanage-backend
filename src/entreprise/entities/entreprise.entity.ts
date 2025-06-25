@@ -8,6 +8,7 @@ import {
   DeleteDateColumn,
 } from 'typeorm';
 import { UtilisateurEntreprise } from 'src/UtilisateurEntreprise/entities/utilisateur-entreprise.entity';
+import { Contrat } from 'src/contrat/entities/contrat.entity';
 
 @Entity()
 export class Entreprise {
@@ -40,4 +41,10 @@ export class Entreprise {
 
   @OneToMany(() => UtilisateurEntreprise, (ue) => ue.entreprise)
   utilisateurs!: UtilisateurEntreprise[];
+   @OneToMany(
+    () => Contrat,
+    (contrat) => contrat.entreprise,
+  )
+  contrats: Contrat[]
+
 }

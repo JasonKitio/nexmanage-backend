@@ -40,6 +40,7 @@ import { CongeModule } from './conge/conge.module';
     EntrepriseModule,
     ContractModule,
     CongeModule,
+      MessageModule,
 
 
     // Cache avec Redis

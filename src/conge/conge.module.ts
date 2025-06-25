@@ -1,5 +1,4 @@
-import { Module } from '@nestjs/common';
-import { MessageGateway } from 'src/message/message.gateway';
+import { forwardRef, Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { CongeService } from './conge.service';
 import { CongeController } from './conge.controller';
@@ -13,11 +12,11 @@ import { AuthModule } from 'src/auth/auth.module';
 @Module({
   imports: [
     TypeOrmModule.forFeature([Conge, Utilisateur, UtilisateurEntreprise]),
-    MessageModule,AuthModule
-    
+      forwardRef(() => MessageModule),
+    AuthModule
   ],
   controllers: [CongeController],
-  providers: [CongeService, NotificationService,MessageGateway],
-  exports: [CongeService,MessageGateway],
+  providers: [CongeService, NotificationService],
+  exports: [CongeService],
 })
 export class CongeModule {}

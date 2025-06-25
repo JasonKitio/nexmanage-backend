@@ -559,18 +559,83 @@ async getMyCompanies(userId: string, paginationDto: PaginationDto) {
   return {
     message: 'Mes entreprises récupérées avec succès',
     data: companiesWithUsers,
-    meta: {
+    pargination: {
       total,
       page,
       limit,
       totalPages: Math.ceil(total / limit),
-      userInfo: {
-        id: user.idUtilisateur,
-        nom: user.nom,
-        email: user.email,
-        role: user.role,
+    },
+  };
+}
+async getCompanyById(userId: string, companyId: string) {
+  // Vérifier que l'utilisateur existe
+  const user = await this.utilisateurRepository.findOne({
+    where: { idUtilisateur: userId },
+  });
+
+  if (!user) {
+    throw new NotFoundException('Utilisateur introuvable');
+  }
+
+  // Vérifier que l'entreprise existe et que l'utilisateur y a accès
+  const userCompany = await this.utilisateurEntrepriseRepository.findOne({
+    where: {
+      utilisateur: { idUtilisateur: userId },
+      entreprise: { 
+        idEntreprise: companyId,
+        delete_at: IsNull() // Exclure les entreprises supprimées
       },
     },
+    relations: [
+      'entreprise',
+      'entreprise.utilisateurs',
+      'entreprise.utilisateurs.utilisateur'
+    ],
+  });
+
+  if (!userCompany) {
+    throw new NotFoundException('Entreprise introuvable ou accès non autorisé');
+  }
+
+  const entreprise = userCompany.entreprise;
+
+  // Compter le nombre total d'utilisateurs dans l'entreprise
+  const totalUsers = entreprise.utilisateurs?.length || 0;
+
+  // Séparer le propriétaire des autres utilisateurs
+  const owner = entreprise.utilisateurs?.find(ue => ue.isOwner === true);
+  const employees = entreprise.utilisateurs?.filter(ue => ue.isOwner === false) || [];
+
+  const companyData = {
+    id: entreprise.idEntreprise,
+    nom: entreprise.nom,
+    domaine: entreprise.domaine,
+    adresse: entreprise.adresse,
+    email: entreprise.email,
+    nbre_employers: entreprise.nbre_employers,
+    dateCreation: entreprise.dateCreation,
+    totalUsers,
+    owner: owner ? {
+      id: owner.utilisateur.idUtilisateur,
+      nom: owner.utilisateur.nom,
+      email: owner.utilisateur.email,
+      telephone: owner.utilisateur.telephone,
+      role: owner.utilisateur.role,
+      dateAjout: owner.dateAjout,
+    } : null,
+    employees: employees.map(emp => ({
+      id: emp.utilisateur.idUtilisateur,
+      nom: emp.utilisateur.nom,
+      email: emp.utilisateur.email,
+      telephone: emp.utilisateur.telephone,
+      role: emp.utilisateur.role,
+      dateAjout: emp.dateAjout,
+    })),
+  };
+
+  return {
+    message: 'Entreprise récupérée avec succès',
+    data: companyData,
   };
 }
 }
