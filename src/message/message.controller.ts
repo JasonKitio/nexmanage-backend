@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Body, Param, UseGuards } from '@nestjs/common';
+import { Controller, Get, Post, Body, Param, UseGuards, Request } from '@nestjs/common';
 import { MessageService } from './message.service';
 import { CreateMessageDto } from './dto/create-message.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
@@ -30,4 +30,17 @@ export class MessageController {
   markAsRead(@Param('id') id: string) {
     return this.messageService.markAsRead(id);
   }
+
+   @Get()
+  async getMyMessages(@Request() req) {
+    return await this.messageService.getMessagesForUser(req.user.userId);
+  }
+
+  @Get('unread-count')
+  async getUnreadCount(@Request() req) {
+    const count = await this.messageService.getUnreadCount(req.user.userId);
+    return { count };
+  }
+
+
 }

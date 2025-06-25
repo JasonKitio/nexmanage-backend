@@ -33,11 +33,11 @@ import  { Response } from "express"
 export class AuthController {
   constructor(private authService: AuthService) {}
 
-  private setCookies(res: Response, accessToken: string, refreshToken: string) {
+  private setCookies(res: Response, accesstoken: string, refreshtoken: string) {
     const isProduction = process.env.NODE_ENV === "production"
 
     // Cookie pour l'access token
-    res.cookie("accessToken", accessToken, {
+    res.cookie("accessToken", accesstoken, {
       httpOnly: true,
       secure: isProduction,
       sameSite: isProduction ? "strict" : "lax",
@@ -46,7 +46,7 @@ export class AuthController {
     })
 
     // Cookie pour le refresh token
-    res.cookie("refreshToken", refreshToken, {
+    res.cookie("refreshToken", refreshtoken, {
       httpOnly: true,
       secure: isProduction,
       sameSite: isProduction ? "strict" : "lax",

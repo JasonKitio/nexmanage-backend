@@ -13,6 +13,7 @@ import { TacheModule } from './tache/tache.module';
 import { EntrepriseModule } from './entreprise/entreprise.module';
 import { ContractModule } from './contrat/contract.module';
 import { MessageModule } from './message/message.module';
+import { CongeModule } from './conge/conge.module';
 
 @Module({
   imports: [
@@ -38,6 +39,7 @@ import { MessageModule } from './message/message.module';
     TacheModule,
     EntrepriseModule,
     ContractModule,
+    CongeModule,
 
 
     // Cache avec Redis

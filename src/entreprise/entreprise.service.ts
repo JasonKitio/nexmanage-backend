@@ -484,4 +484,93 @@ generateVerificationCode(): string {
       throw new ForbiddenException('Accès refusé: permissions insuffisantes');
     }
   }
+
+  // Méthode à ajouter dans votre EntrepriseService
+
+async getMyCompanies(userId: string, paginationDto: PaginationDto) {
+  const { page = 1, limit = 10 } = paginationDto;
+  const skip = (page - 1) * limit;
+
+  // Vérifier que l'utilisateur existe
+  const user = await this.utilisateurRepository.findOne({
+    where: { idUtilisateur: userId },
+  });
+  
+  if (!user) {
+    throw new NotFoundException('Utilisateur introuvable');
+  }
+
+  // Récupérer toutes les entreprises où l'utilisateur est propriétaire
+  const [userCompanies, total] = await this.utilisateurEntrepriseRepository.findAndCount({
+    where: {
+      utilisateur: { idUtilisateur: userId },
+      isOwner: true,
+      entreprise: { delete_at: IsNull() }, // Exclure les entreprises supprimées
+    },
+    relations: [
+      'entreprise',
+      'entreprise.utilisateurs',
+      'entreprise.utilisateurs.utilisateur'
+    ],
+    skip,
+    take: limit,
+    order: { dateAjout: 'DESC' },
+  });
+
+  // Formater les données pour inclure les informations des entreprises avec leurs utilisateurs
+  const companiesWithUsers = userCompanies.map(userCompany => {
+    const entreprise = userCompany.entreprise;
+    
+    // Compter le nombre total d'utilisateurs dans l'entreprise
+    const totalUsers = entreprise.utilisateurs?.length || 0;
+    
+    // Séparer le propriétaire des autres utilisateurs
+    const owner = entreprise.utilisateurs?.find(ue => ue.isOwner === true);
+    const employees = entreprise.utilisateurs?.filter(ue => ue.isOwner === false) || [];
+
+    return {
+      id: entreprise.idEntreprise,
+      nom: entreprise.nom,
+      domaine: entreprise.domaine,
+      adresse: entreprise.adresse,
+      email: entreprise.email,
+      nbre_employers: entreprise.nbre_employers,
+      dateCreation: entreprise.dateCreation,
+      totalUsers,
+      owner: owner ? {
+        id: owner.utilisateur.idUtilisateur,
+        nom: owner.utilisateur.nom,
+        email: owner.utilisateur.email,
+        telephone: owner.utilisateur.telephone,
+        role: owner.utilisateur.role,
+        dateAjout: owner.dateAjout,
+      } : null,
+      employees: employees.map(emp => ({
+        id: emp.utilisateur.idUtilisateur,
+        nom: emp.utilisateur.nom,
+        email: emp.utilisateur.email,
+        telephone: emp.utilisateur.telephone,
+        role: emp.utilisateur.role,
+        dateAjout: emp.dateAjout,
+      })),
+    };
+  });
+
+  return {
+    message: 'Mes entreprises récupérées avec succès',
+    data: companiesWithUsers,
+    meta: {
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit),
+      userInfo: {
+        id: user.idUtilisateur,
+        nom: user.nom,
+        email: user.email,
+        role: user.role,
+      },
+    },
+  };
+}
 }

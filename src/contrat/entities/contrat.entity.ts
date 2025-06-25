@@ -27,12 +27,11 @@ export class Contrat {
   })
   lieu: Point;
 
-  @Column({ type: 'timestamp' })
-  dateDebut: Date;
+  @Column({ type: 'timestamptz' }) 
+dateDebut: Date;
 
-  @Column({ type: 'timestamp' })
-  dateFin: Date;
-
+@Column({ type: 'timestamptz' })
+dateFin: Date;
   @Column({ nullable: true })
   description: string;
 
