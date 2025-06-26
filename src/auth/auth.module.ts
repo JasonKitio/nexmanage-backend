@@ -1,4 +1,4 @@
-import { Module } from "@nestjs/common"
+import { Module,forwardRef } from "@nestjs/common"
 import { JwtModule } from "@nestjs/jwt"
 import { ConfigModule, ConfigService } from "@nestjs/config"
 import { AuthService } from "./auth.service"
@@ -10,10 +10,11 @@ import { TwilioModule } from "../twillio/twillio.module"
 import { CacheModule } from "../cache/cache.module"
 import { JwtStrategy } from "./jwt.strategie"
 
+
 @Module({
   imports: [
     ConfigModule,
-    UsersModule,
+ forwardRef(() => UsersModule),
     TwilioModule,
     CacheModule,
     JwtModule.registerAsync({

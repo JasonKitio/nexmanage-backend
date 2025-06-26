@@ -9,6 +9,9 @@ import {
 } from 'typeorm';
 import { UtilisateurEntreprise } from 'src/UtilisateurEntreprise/entities/utilisateur-entreprise.entity';
 import { Contrat } from 'src/contrat/entities/contrat.entity';
+import { tache } from 'src/tache/entities/tache.entity';
+import { Message } from 'src/message/entities/message.entity';
+import { Conge } from 'src/conge/entities/conge.entity';
 
 @Entity()
 export class Entreprise {
@@ -46,5 +49,24 @@ export class Entreprise {
     (contrat) => contrat.entreprise,
   )
   contrats: Contrat[]
+
+   @OneToMany(
+    () => tache,
+    (tache) => tache.entreprise,
+  )
+  taches: tache[]
+  
+  @OneToMany(
+    () => Message,
+    (message) => message.entreprise,
+  )
+  messages: Message[]
+
+ @OneToMany(
+    () => Conge,
+    (conge) => conge.entreprise,
+  )
+  conges: Conge[]
+
 
 }

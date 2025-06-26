@@ -1,3 +1,4 @@
+import { Entreprise } from 'src/entreprise/entities/entreprise.entity';
 import { Utilisateur } from 'src/User/entities/utilisateur.entity';
 import { StatutConge } from 'src/utils/enums/enums';
 import {
@@ -8,6 +9,7 @@ import {
   CreateDateColumn,
   UpdateDateColumn,
   DeleteDateColumn,
+  JoinColumn,
 } from 'typeorm';
 
 @Entity()
@@ -42,6 +44,20 @@ export class Conge {
     onDelete: 'CASCADE',
   })
   utilisateur: Utilisateur;
+
+   @ManyToOne(
+    () => Entreprise,
+    (entreprise) => entreprise.conges,
+    {
+      nullable: true,
+      onDelete: "CASCADE",
+    },
+  )
+  @JoinColumn({ name: "entrepriseId" })
+  entreprise: Entreprise
+
+  @Column({nullable:true})
+  entrepriseId: string
 
   @CreateDateColumn({ type: 'timestamp' })
   dateCreation: Date;

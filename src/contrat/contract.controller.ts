@@ -54,9 +54,8 @@ export class ContractController {
   async createForEntreprise(
     @Param('entrepriseId', ParseUUIDPipe) entrepriseId: string,
     @Body(ValidationPipe) createContractDto: CreateContractDto,
-    @Headers('timezone') timezone?: string,
   ) {
-    return this.contractService.createForEntreprise(entrepriseId, createContractDto, timezone)
+    return this.contractService.createForEntreprise(entrepriseId, createContractDto)
   }
 
   @Get("entreprise/:entrepriseId")
@@ -97,10 +96,9 @@ export class ContractController {
   async getContractByEntreprise(
     @Param('entrepriseId', ParseUUIDPipe) entrepriseId: string,
     @Param('contractId', ParseUUIDPipe) contractId: string,
-    @Headers('timezone') timezone?: string,
   ) {
     const contract = await this.contractService.getContractByEntreprise(entrepriseId, contractId)
-    return this.contractService.formatContractForDisplay(contract, timezone)
+    return this.contractService.formatContractForDisplay(contract)
   }
 
   @Patch("entreprise/:entrepriseId/:contractId")
@@ -112,9 +110,9 @@ export class ContractController {
     @Param('entrepriseId', ParseUUIDPipe) entrepriseId: string,
     @Param('contractId', ParseUUIDPipe) contractId: string,
     @Body(ValidationPipe) updateContractDto: UpdateContractDto,
-    @Headers('timezone') timezone?: string,
+    
   ) {
-    return this.contractService.updateContractForEntreprise(entrepriseId, contractId, updateContractDto, timezone)
+    return this.contractService.updateContractForEntreprise(entrepriseId, contractId, updateContractDto)
   }
 
   @Delete("entreprise/:entrepriseId/:contractId")
@@ -139,13 +137,12 @@ export class ContractController {
     @Param('entrepriseId', ParseUUIDPipe) entrepriseId: string,
     @Param('contractId', ParseUUIDPipe) contractId: string,
     @Body(ValidationPipe) addUsersDto: AddUsersToContractDto,
-    @Query('timezone') timezone: string = 'Africa/Douala',
+   
   ): Promise<Contrat> {
     return await this.contractService.addUsersToContractInEntreprise(
       entrepriseId,
       contractId,
       addUsersDto.utilisateursIds,
-      timezone,
     )
   }
 

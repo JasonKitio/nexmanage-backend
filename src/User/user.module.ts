@@ -8,10 +8,13 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
 import { CacheModule } from 'src/cache/cache.module';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
+import { UtilisateurEntreprise } from 'src/UtilisateurEntreprise/entities/utilisateur-entreprise.entity';
+import { EntrepriseModule } from '../entreprise/entreprise.module';
+
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([Utilisateur]),
+    TypeOrmModule.forFeature([Utilisateur,UtilisateurEntreprise]),
     JwtModule.registerAsync({
       imports: [ConfigModule],
       useFactory: async (configService: ConfigService) => ({
@@ -23,7 +26,9 @@ import { RolesGuard } from '../auth/guards/roles.guard';
       inject: [ConfigService],
     }),
     ConfigModule,
-    CacheModule
+    CacheModule,
+    EntrepriseModule
+    
   ],
   providers: [UsersService, JwtAuthGuard],
   controllers: [UsersController],

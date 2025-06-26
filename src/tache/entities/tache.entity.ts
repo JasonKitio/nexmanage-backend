@@ -5,8 +5,11 @@ import {
   CreateDateColumn,
   UpdateDateColumn,
   DeleteDateColumn,
+  ManyToOne,
+  JoinColumn,
 } from 'typeorm';
 import { Priorite, StatutTache } from 'src/utils/enums/enums';
+import { Entreprise } from 'src/entreprise/entities/entreprise.entity';
 
 @Entity()
 export class tache {
@@ -40,4 +43,15 @@ export class tache {
 
   @DeleteDateColumn({ type: 'timestamp' })
   delete_at: Date | null;
+
+    @ManyToOne(
+    () => Entreprise,
+    (entreprise) => entreprise.taches,
+    {
+      nullable: true,
+      onDelete: "CASCADE",
+    },
+  )
+  @JoinColumn({ name: "entrepriseId" })
+  entreprise: Entreprise
 }

@@ -6,7 +6,20 @@ import  { Utilisateur } from "../User/entities/utilisateur.entity"
 import  { Presence } from "./../presence/entities/presence.entity"
 import  { TwilioService } from "../twillio/twillio.service"
 import { Cron } from "@nestjs/schedule"
-import * as moment from "moment-timezone"
+import * as moment from "moment-timezone";
+import * as dayjs from 'dayjs';
+import * as utc from 'dayjs/plugin/utc';
+import * as timezone from 'dayjs/plugin/timezone';
+import * as isBetween from 'dayjs/plugin/isBetween';
+import * as isSameOrAfter from 'dayjs/plugin/isSameOrAfter';
+import * as isSameOrBefore from 'dayjs/plugin/isSameOrBefore';
+
+dayjs.extend(utc);
+dayjs.extend(timezone);
+dayjs.extend(isBetween);
+dayjs.extend(isSameOrAfter);
+dayjs.extend(isSameOrBefore);
+
 import  {
   CreateContractDto,
   UpdateContractDto,
@@ -55,27 +68,24 @@ constructor(
   async createForEntreprise(
     entrepriseId: string,
     createContractDto: CreateContractDto,
-    timezone = "Africa/Douala",
   ): Promise<Contrat[]> {
     // Vérifier que l'entreprise existe
     const entreprise = await this.entrepriseRepository.findOne({
       where: { idEntreprise: entrepriseId },
-    })
-
+    });
     if (!entreprise) {
-      throw new NotFoundException(`Entreprise avec l'ID ${entrepriseId} non trouvée`)
+      throw new NotFoundException(`Entreprise avec l'ID ${entrepriseId} non trouvée`);
     }
 
     // Validation des dates
-    this.validateContractDates(createContractDto.dateDebut, createContractDto.dateFin, timezone)
-
-    const createdContracts: Contrat[] = []
+    this.validateContractDates(createContractDto.dateDebut, createContractDto.dateFin);
+    const createdContracts: Contrat[] = [];
 
     // Si plusieurs utilisateurs sont spécifiés, créer un contrat pour chacun
     if (createContractDto.utilisateursIds && createContractDto.utilisateursIds.length > 0) {
       // Vérifier que tous les utilisateurs appartiennent à cette entreprise
-      await this.validateUsersInEntreprise(createContractDto.utilisateursIds, entrepriseId)
-
+      await this.validateUsersInEntreprise(createContractDto.utilisateursIds, entrepriseId);
+      
       for (const utilisateurId of createContractDto.utilisateursIds) {
         const contract = await this.createSingleContractForEntreprise(
           entreprise,
@@ -83,17 +93,15 @@ constructor(
             ...createContractDto,
             utilisateurId,
           },
-          timezone,
-        )
-        createdContracts.push(...contract)
+        );
+        createdContracts.push(...contract);
       }
     } else {
       // Créer un contrat sans utilisateur assigné
-      const contract = await this.createSingleContractForEntreprise(entreprise, createContractDto, timezone)
-      createdContracts.push(...contract)
+      const contract = await this.createSingleContractForEntreprise(entreprise, createContractDto);
+      createdContracts.push(...contract);
     }
-
-    return createdContracts
+    return createdContracts;
   }
 
   // OBTENIR TOUS LES CONTRATS D'UNE ENTREPRISE
@@ -138,7 +146,6 @@ constructor(
     entrepriseId: string,
     contractId: string,
     updateContractDto: UpdateContractDto,
-    timezone = "Africa/Douala",
   ): Promise<Contrat> {
     const contract = await this.getContractByEntreprise(entrepriseId, contractId)
 
@@ -164,11 +171,11 @@ constructor(
 
     // Mettre à jour les horaires
     if (updateContractDto.dateDebut) {
-      updatedData.dateDebut = this.convertToUTC(updateContractDto.dateDebut, timezone)
+      updatedData.dateDebut = this.convertToUTC(updateContractDto.dateDebut)
       contract.dateDebut = updatedData.dateDebut
     }
     if (updateContractDto.dateFin) {
-      updatedData.dateFin = this.convertToUTC(updateContractDto.dateFin, timezone)
+      updatedData.dateFin = this.convertToUTC(updateContractDto.dateFin)
       contract.dateFin = updatedData.dateFin
     }
 
@@ -180,7 +187,6 @@ constructor(
           updatedData.dateDebut || contract.dateDebut,
           updatedData.dateFin || contract.dateFin,
           contractId,
-          timezone,
         )
       }
     }
@@ -220,7 +226,6 @@ constructor(
     entrepriseId: string,
     contractId: string,
     utilisateursIds: string[],
-    timezone = "Africa/Douala",
   ): Promise<Contrat> {
     const contract = await this.getContractByEntreprise(entrepriseId, contractId)
 
@@ -248,7 +253,6 @@ constructor(
         contract.dateDebut,
         contract.dateFin,
         contractId,
-        timezone,
       )
     }
 
@@ -290,19 +294,20 @@ constructor(
   }
 
   // POINTAGE POUR UN CONTRAT D'UNE ENTREPRISE
+
   async pointagePresenceForEntreprise(
     entrepriseId: string,
     contractId: string,
     pointageDto: PointageContratDto,
   ): Promise<Presence> {
     // Vérifier que le contrat appartient à l'entreprise
-    const contract = await this.getContractByEntreprise(entrepriseId, contractId)
+    const contract = await this.getContractByEntreprise(entrepriseId, contractId);
 
     // Vérifier que l'utilisateur appartient à l'entreprise
-    await this.validateUsersInEntreprise([pointageDto.utilisateurId], entrepriseId)
+    await this.validateUsersInEntreprise([pointageDto.utilisateurId], entrepriseId);
 
-    // Utiliser la logique existante de pointage
-    const now = new Date()
+    // Utiliser l'heure locale de la machine
+    const now = new Date();
 
     const matchingContract = await this.contractRepository.findOne({
       where: {
@@ -312,43 +317,44 @@ constructor(
         dateFin: MoreThanOrEqual(now),
       },
       relations: ["utilisateur"],
-    })
+    });
 
     if (!matchingContract) {
-      console.log("Contract Debut:", contract.dateDebut)
-      console.log("Now (Local):", now)
-      console.log("Contract Fin:", contract.dateFin)
-      throw new BadRequestException("Aucun contrat actif pour l'heure actuelle.")
+      // CORRECTION: Traiter les dates du contrat comme des dates locales sans conversion
+      console.log("Contract Debut:", this.formatAsLocalTime(contract.dateDebut));
+      console.log("Now (Local):", this.formatAsLocalTime(now));
+      console.log("Contract Fin:", this.formatAsLocalTime(contract.dateFin));
+      throw new BadRequestException("Aucun contrat actif pour l'heure actuelle.");
     }
 
     // Vérifier si l'utilisateur est assigné à ce contrat
-    const isUserAssigned = matchingContract.utilisateur?.some((u) => u.idUtilisateur === pointageDto.utilisateurId)
+    const isUserAssigned = matchingContract.utilisateur?.some((u) => u.idUtilisateur === pointageDto.utilisateurId);
     if (!isUserAssigned) {
-      throw new BadRequestException("Vous n'êtes pas assigné à ce contrat.")
+      throw new BadRequestException("Vous n'êtes pas assigné à ce contrat.");
     }
 
     const user = await this.utilisateurRepository.findOne({
       where: { idUtilisateur: pointageDto.utilisateurId },
-    })
+    });
 
     if (!user) {
-      throw new NotFoundException(`Utilisateur avec l'ID ${pointageDto.utilisateurId} non trouvé`)
+      throw new NotFoundException(`Utilisateur avec l'ID ${pointageDto.utilisateurId} non trouvé`);
     }
 
     // Vérifier la distance (même logique que l'original)
     if (!Array.isArray(pointageDto.localisation) || pointageDto.localisation.length !== 2) {
-      throw new BadRequestException("Localisation invalide (latitude, longitude requis)")
+      throw new BadRequestException("Localisation invalide (latitude, longitude requis)");
     }
 
-    const [userLat, userLng] = pointageDto.localisation
-    const [contractLat, contractLng] = contract.lieu.coordinates
+    const [userLat, userLng] = pointageDto.localisation;
+    const [contractLat, contractLng] = contract.lieu.coordinates;
 
-    const distance = this.calculateDistance(userLat, userLng, contractLat, contractLng)
+    const distance = this.calculateDistance(userLat, userLng, contractLat, contractLng);
 
     if (distance > 500) {
       throw new BadRequestException(
         `Pointage impossible: vous êtes à ${Math.round(distance)}m du lieu de travail, la limite est de 500m`,
-      )
+      );
     }
 
     // Vérifier s'il existe déjà un pointage sans heure de départ pour cet utilisateur
@@ -358,86 +364,89 @@ constructor(
         contrat: { idContrat: contract.idContrat },
         heureDepart: IsNull(),
       },
-    })
+    });
 
     if (existingPresence) {
       // Pointage de départ
-      const currentTime = new Date()
+      const currentTime = new Date();
 
-      existingPresence.heureDepart = currentTime
+      existingPresence.heureDepart = currentTime;
       existingPresence.localisationDepart = {
         type: "Point",
         coordinates: [pointageDto.localisation[0], pointageDto.localisation[1]],
-      }
+      };
 
       if (pointageDto.notes) {
         existingPresence.notes = existingPresence.notes
           ? existingPresence.notes + " " + pointageDto.notes
-          : pointageDto.notes
+          : pointageDto.notes;
       }
 
-      // Calculer les heures supplémentaires ou départ anticipé (même logique)
-      const dateFin = new Date(contract.dateFin)
-      const today = new Date(currentTime)
+      // CORRECTION: Traiter la date de fin du contrat comme une heure locale
+      const contractEndDate = this.treatAsLocalDate(contract.dateFin);
+      const todayForEnd = new Date(currentTime);
+      
+      // Créer l'heure de fin prévue pour aujourd'hui
       const finPrevue = new Date(
-        today.getFullYear(),
-        today.getMonth(),
-        today.getDate(),
-        dateFin.getHours(),
-        dateFin.getMinutes(),
-      )
+        todayForEnd.getFullYear(),
+        todayForEnd.getMonth(),
+        todayForEnd.getDate(),
+        contractEndDate.getHours(),
+        contractEndDate.getMinutes(),
+        contractEndDate.getSeconds()
+      );
 
-      const diffMilliseconds = currentTime.getTime() - finPrevue.getTime()
-      const diffMinutes = Math.round(diffMilliseconds / 60000)
+      const diffMilliseconds = currentTime.getTime() - finPrevue.getTime();
+      const diffMinutes = Math.round(diffMilliseconds / 60000);
 
-      let messageDepart = ""
+      let messageDepart = "";
       if (diffMinutes < 0) {
-        const absMinutes = Math.abs(diffMinutes)
-        const heuresDepart = Math.floor(absMinutes / 60)
-        const minutesDepart = absMinutes % 60
+        const absMinutes = Math.abs(diffMinutes);
+        const heuresDepart = Math.floor(absMinutes / 60);
+        const minutesDepart = absMinutes % 60;
 
-        messageDepart = "Départ anticipé de "
+        messageDepart = "Départ anticipé de ";
         if (heuresDepart > 0) {
-          messageDepart += `${heuresDepart} heure${heuresDepart > 1 ? "s" : ""}`
+          messageDepart += `${heuresDepart} heure${heuresDepart > 1 ? "s" : ""}`;
           if (minutesDepart > 0) {
-            messageDepart += ` et ${minutesDepart} minute${minutesDepart > 1 ? "s" : ""}`
+            messageDepart += ` et ${minutesDepart} minute${minutesDepart > 1 ? "s" : ""}`;
           }
         } else {
-          messageDepart += `${minutesDepart} minute${minutesDepart > 1 ? "s" : ""}`
+          messageDepart += `${minutesDepart} minute${minutesDepart > 1 ? "s" : ""}`;
         }
-        messageDepart += " avant l'heure de fin prévue."
+        messageDepart += " avant l'heure de fin prévue.";
       } else if (diffMinutes > 0) {
-        const heuresSup = Math.floor(diffMinutes / 60)
-        const minutesSup = diffMinutes % 60
+        const heuresSup = Math.floor(diffMinutes / 60);
+        const minutesSup = diffMinutes % 60;
 
-        messageDepart = "Heures supplémentaires effectuées: "
+        messageDepart = "Heures supplémentaires effectuées: ";
         if (heuresSup > 0) {
-          messageDepart += `${heuresSup} heure${heuresSup > 1 ? "s" : ""}`
+          messageDepart += `${heuresSup} heure${heuresSup > 1 ? "s" : ""}`;
           if (minutesSup > 0) {
-            messageDepart += ` et ${minutesSup} minute${minutesSup > 1 ? "s" : ""}`
+            messageDepart += ` et ${minutesSup} minute${minutesSup > 1 ? "s" : ""}`;
           }
         } else {
-          messageDepart += `${minutesSup} minute${minutesSup > 1 ? "s" : ""}`
+          messageDepart += `${minutesSup} minute${minutesSup > 1 ? "s" : ""}`;
         }
-        messageDepart += "."
+        messageDepart += ".";
       }
 
       if (messageDepart) {
         if (existingPresence.notes) {
-          existingPresence.notes += " " + messageDepart
+          existingPresence.notes += " " + messageDepart;
         } else {
-          existingPresence.notes = messageDepart
+          existingPresence.notes = messageDepart;
         }
       }
 
-      return this.presenceRepository.save(existingPresence)
+      return this.presenceRepository.save(existingPresence);
     } else {
       // Vérifier si l'utilisateur a déjà pointé aujourd'hui
-      const today = new Date()
-      today.setHours(0, 0, 0, 0)
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
 
-      const tomorrow = new Date(today)
-      tomorrow.setDate(tomorrow.getDate() + 1)
+      const tomorrow = new Date(today);
+      tomorrow.setDate(tomorrow.getDate() + 1);
 
       const hasPointedToday = await this.presenceRepository.findOne({
         where: {
@@ -445,16 +454,16 @@ constructor(
           contrat: { idContrat: contract.idContrat },
           heureArrivee: Between(today, tomorrow),
         },
-      })
+      });
 
       if (hasPointedToday) {
         throw new BadRequestException(
           "Vous avez déjà pointé aujourd'hui. Un seul pointage d'arrivée et de départ est autorisé par jour.",
-        )
+        );
       }
 
       // Créer un nouveau pointage d'arrivée
-      const currentTime = new Date()
+      const currentTime = new Date();
       const presence = this.presenceRepository.create({
         utilisateur: user,
         contrat: contract,
@@ -464,46 +473,91 @@ constructor(
           coordinates: pointageDto.localisation,
         },
         notes: pointageDto.notes,
-      })
+      });
 
-      // Vérifier si l'employé est en retard (même logique)
-      const horaireDebut = new Date(contract.dateDebut)
+      // CORRECTION: Traiter la date de début du contrat comme une heure locale
+      const contractStartDate = this.treatAsLocalDate(contract.dateDebut);
+      const todayForStart = new Date(currentTime);
+      
+      // Créer l'heure de début prévue pour aujourd'hui
       const debutPrevu = new Date(
-        currentTime.getFullYear(),
-        currentTime.getMonth(),
-        currentTime.getDate(),
-        horaireDebut.getHours(),
-        horaireDebut.getMinutes(),
-      )
+        todayForStart.getFullYear(),
+        todayForStart.getMonth(),
+        todayForStart.getDate(),
+        contractStartDate.getHours(),
+        contractStartDate.getMinutes(),
+        contractStartDate.getSeconds()
+      );
 
-      const diffMilliseconds = currentTime.getTime() - debutPrevu.getTime()
-      const diffMinutes = Math.round(diffMilliseconds / 60000)
+      const diffMilliseconds = currentTime.getTime() - debutPrevu.getTime();
+      const diffMinutes = Math.round(diffMilliseconds / 60000);
 
       if (diffMinutes > 0) {
-        const heuresRetard = Math.floor(diffMinutes / 60)
-        const minutesRetard = diffMinutes % 60
+        const heuresRetard = Math.floor(diffMinutes / 60);
+        const minutesRetard = diffMinutes % 60;
 
-        let messageRetard = "Arrivée avec "
+        let messageRetard = "Arrivée avec ";
         if (heuresRetard > 0) {
-          messageRetard += `${heuresRetard} heure${heuresRetard > 1 ? "s" : ""}`
+          messageRetard += `${heuresRetard} heure${heuresRetard > 1 ? "s" : ""}`;
           if (minutesRetard > 0) {
-            messageRetard += ` et ${minutesRetard} minute${minutesRetard > 1 ? "s" : ""}`
+            messageRetard += ` et ${minutesRetard} minute${minutesRetard > 1 ? "s" : ""}`;
           }
         } else {
-          messageRetard += `${minutesRetard} minute${minutesRetard > 1 ? "s" : ""}`
+          messageRetard += `${minutesRetard} minute${minutesRetard > 1 ? "s" : ""}`;
         }
-        messageRetard += " de retard."
+        messageRetard += " de retard.";
 
         if (presence.notes) {
-          presence.notes += " " + messageRetard
+          presence.notes += " " + messageRetard;
         } else {
-          presence.notes = messageRetard
+          presence.notes = messageRetard;
         }
       }
 
-      return this.presenceRepository.save(presence)
+      return this.presenceRepository.save(presence);
     }
   }
+
+  /**
+   * Traite une date comme si elle était en heure locale, 
+   * sans conversion de fuseau horaire
+   */
+  private treatAsLocalDate(date: Date | string): Date {
+    if (typeof date === 'string') {
+      // Si c'est une string, on la parse comme heure locale
+      // en retirant le 'Z' ou l'info de timezone s'il y en a
+      const dateStr = date.replace(/Z$/, '').replace(/[+-]\d{2}:\d{2}$/, '');
+      return new Date(dateStr);
+    }
+    
+    // Si c'est déjà un objet Date, on crée une nouvelle date 
+    // avec les mêmes composants mais en heure locale
+    return new Date(
+      date.getFullYear(),
+      date.getMonth(),
+      date.getDate(),
+      date.getHours(),
+      date.getMinutes(),
+      date.getSeconds(),
+      date.getMilliseconds()
+    );
+  }
+
+  /**
+   * Formate une date en affichant ses composants comme heure locale
+   */
+  private formatAsLocalTime(date: Date | string): string {
+    const localDate = this.treatAsLocalDate(date);
+    
+    return localDate.getFullYear() + '-' +
+           String(localDate.getMonth() + 1).padStart(2, '0') + '-' +
+           String(localDate.getDate()).padStart(2, '0') + ' ' +
+           String(localDate.getHours()).padStart(2, '0') + ':' +
+           String(localDate.getMinutes()).padStart(2, '0') + ':' +
+           String(localDate.getSeconds()).padStart(2, '0');
+  }
+
+
 
   // AJOUTER UN COMMENTAIRE À UN CONTRAT D'UNE ENTREPRISE
   async addCommentToContractInEntreprise(
@@ -801,9 +855,8 @@ constructor(
   private async createSingleContractForEntreprise(
     entreprise: Entreprise,
     createContractDto: any,
-    timezone: string,
   ): Promise<Contrat[]> {
-    this.validateContractDates(createContractDto.dateDebut, createContractDto.dateFin, timezone)
+    this.validateContractDates(createContractDto.dateDebut, createContractDto.dateFin)
 
     const contract = this.contractRepository.create({
       lieu: {
@@ -813,8 +866,8 @@ constructor(
           createContractDto.lieu[0], // latitude
         ],
       },
-      dateDebut: this.convertToUTC(createContractDto.dateDebut, timezone),
-      dateFin: this.convertToUTC(createContractDto.dateFin, timezone),
+      dateDebut: this.convertToUTC(createContractDto.dateDebut),
+      dateFin: this.convertToUTC(createContractDto.dateFin),
       description: createContractDto.description,
       pause: createContractDto.pause,
       nombreJoursRepetition: createContractDto.nombreJoursRepetition,
@@ -840,7 +893,6 @@ constructor(
           contract.dateDebut,
           contract.dateFin,
           undefined,
-          timezone,
         )
       }
     }
@@ -882,7 +934,7 @@ constructor(
 
           const nouvelleDateFin = new Date(nouvelleDate.getTime() + dureeContrat)
 
-          this.validateContractDates(nouvelleDate, nouvelleDateFin, timezone)
+          this.validateContractDates(nouvelleDate, nouvelleDateFin)
 
           if (createContractDto.utilisateurId) {
             await this.checkScheduleConflict(
@@ -890,7 +942,6 @@ constructor(
               nouvelleDate,
               nouvelleDateFin,
               undefined,
-              timezone,
             )
           }
 
@@ -1281,39 +1332,42 @@ constructor(
     })
   }
 
-  formatContractForDisplay(contract: Contrat, timezone = "Africa/Douala"): any {
+  formatContractForDisplay(contract: Contrat): any {
     return {
       ...contract,
-      horaireDebut: contract.dateDebut ? moment(contract.dateDebut).tz(timezone).format("YYYY-MM-DD HH:mm:ss") : null,
-      horaireFin: contract.dateFin ? moment(contract.dateFin).tz(timezone).format("YYYY-MM-DD HH:mm:ss") : null,
-      timezone,
+      horaireDebut: contract.dateDebut ? moment(contract.dateDebut).format("YYYY-MM-DD HH:mm:ss") : null,
+      horaireFin: contract.dateFin ? moment(contract.dateFin).format("YYYY-MM-DD HH:mm:ss") : null,
+    
     }
   }
 
   // MÉTHODES UTILITAIRES PRIVÉES
-  private validateContractDates(dateDebut: Date | string, dateFin: Date | string, timezone = "Africa/Douala"): void {
-    const debutUTC = this.convertToUTC(dateDebut, timezone)
-    const finUTC = this.convertToUTC(dateFin, timezone)
-    const maintenant = new Date()
+private validateContractDates(dateDebut: Date | string, dateFin: Date | string): void {
+    const debutUTC = this.convertToUTC(dateDebut);
+    const finUTC = this.convertToUTC(dateFin);
+    const maintenant = dayjs().utc();
 
-    if (finUTC <= debutUTC) {
-      throw new BadRequestException("La date de fin doit être postérieure à la date de début")
+    if (dayjs(finUTC).isBefore(dayjs(debutUTC)) || dayjs(finUTC).isSame(dayjs(debutUTC))) {
+      throw new BadRequestException("La date de fin doit être postérieure à la date de début");
     }
 
-    if (debutUTC < maintenant) {
-      const dateDebutFormatee = moment(debutUTC).tz(timezone).format("DD/MM/YYYY à HH:mm")
+    if (dayjs(debutUTC).isBefore(maintenant)) {
+      const dateDebutFormatee = dayjs(debutUTC).format("DD/MM/YYYY à HH:mm");
       throw new BadRequestException(
         `Impossible de créer un contrat qui commence dans le passé. Date de début: ${dateDebutFormatee}`,
-      )
+      );
     }
 
-    if (finUTC < maintenant) {
-      const dateFinFormatee = moment(finUTC).tz(timezone).format("DD/MM/YYYY à HH:mm")
+    if (dayjs(finUTC).isBefore(maintenant)) {
+      const dateFinFormatee = dayjs(finUTC).format("DD/MM/YYYY à HH:mm");
       throw new BadRequestException(
         `Impossible de créer un contrat qui se termine dans le passé. Date de fin: ${dateFinFormatee}`,
-      )
+      );
     }
   }
+
+  
+
 
   private async sendContractNotificationSMS(utilisateur: Utilisateur, contract: Contrat): Promise<void> {
     let locationName
@@ -1348,8 +1402,9 @@ constructor(
     )
   }
 
-  private convertToUTC(date: Date | string, timezone = "Africa/Douala"): Date {
-    return moment.tz(date, timezone).utc().toDate()
+private convertToUTC(date: Date | string): Date {
+    // Avec dayjs
+    return dayjs(date).utc().toDate();
   }
 
   private async checkScheduleConflict(
@@ -1357,14 +1412,13 @@ constructor(
     horaireDebut: Date,
     horaireFin: Date,
     excludeContractId?: string,
-    timezone = "Africa/Douala",
   ): Promise<void> {
     if (!utilisateurId || !horaireDebut || !horaireFin) {
       return
     }
 
-    const debutUTC = this.convertToUTC(horaireDebut, timezone)
-    const finUTC = this.convertToUTC(horaireFin, timezone)
+    const debutUTC = this.convertToUTC(horaireDebut)
+    const finUTC = this.convertToUTC(horaireFin)
 
     if (finUTC <= debutUTC) {
       throw new ConflictException("L'heure de fin doit être postérieure à l'heure de début")
@@ -1390,8 +1444,8 @@ constructor(
     if (conflictingContracts.length > 0) {
       const conflictDetails = conflictingContracts.map((contract) => ({
         id: contract.idContrat,
-        debut: moment(contract.dateDebut).tz(timezone).format("DD/MM/YYYY HH:mm"),
-        fin: moment(contract.dateFin).tz(timezone).format("DD/MM/YYYY HH:mm"),
+        debut: moment(contract.dateDebut).format("DD/MM/YYYY HH:mm"),
+        fin: moment(contract.dateFin).format("DD/MM/YYYY HH:mm"),
         lieu: contract.lieu,
       }))
 

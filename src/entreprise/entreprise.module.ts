@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Module,forwardRef } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { EntrepriseService } from './entreprise.service';
 import { EntrepriseController } from './entreprise.controller';
@@ -14,10 +14,10 @@ import { AuthModule } from 'src/auth/auth.module';
     TypeOrmModule.forFeature([Entreprise, Utilisateur, UtilisateurEntreprise]),
     TwilioModule,
     CacheModule,
-    AuthModule
+     forwardRef(() => AuthModule),
   ],
   controllers: [EntrepriseController],
   providers: [EntrepriseService],
-  exports: [EntrepriseService],
+  exports: [EntrepriseService,TypeOrmModule],
 })
 export class EntrepriseModule {}
