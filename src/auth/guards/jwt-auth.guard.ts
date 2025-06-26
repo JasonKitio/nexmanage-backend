@@ -59,7 +59,7 @@ export class JwtAuthGuard implements CanActivate {
   private extractTokenFromCookie(request: Request): string | undefined {
     // Vérifier les cookies avec différents noms possibles
     const token =
-      request.cookies?.["accessToken"] || request.cookies?.["access_token"] || request.cookies?.["Authorization"]
+      request.cookies?.["accesstoken"] || request.cookies?.["access_token"] || request.cookies?.["Authorization"]
 
     if (token) {
       this.logger.debug("Token trouvé dans les cookies")

@@ -9,12 +9,14 @@ import {
   UpdateDateColumn,
   DeleteDateColumn,
   OneToMany,
+  ManyToOne,
 } from 'typeorm';
 import { Utilisateur } from '../../User/entities/utilisateur.entity';
 import { tache } from '../../tache/entities/tache.entity';
 import { Point } from 'src/utils/types/type';
 import { Presence } from 'src/presence/entities/presence.entity';
 import { Commentaire } from 'src/commentaires/entities/commentaire.entity';
+import { Entreprise } from 'src/entreprise/entities/entreprise.entity';
 
 @Entity()
 export class Contrat {
@@ -75,4 +77,15 @@ dateFin: Date;
   @OneToMany(() => Commentaire, (comment) => comment.contrat)
   comment: Commentaire[];
     contract: { type: "Point"; coordinates: [number, number]; };
+
+    @ManyToOne(
+    () => Entreprise,
+    (entreprise) => entreprise.contrats,
+    {
+      nullable: true,
+      onDelete: "CASCADE",
+    },
+  )
+  @JoinColumn({ name: "entrepriseId" })
+  entreprise: Entreprise
 }

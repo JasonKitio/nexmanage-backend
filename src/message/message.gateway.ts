@@ -1,6 +1,6 @@
 import { WebSocketGateway, SubscribeMessage, MessageBody, WebSocketServer, ConnectedSocket } from '@nestjs/websockets';
 import { Server, Socket } from 'socket.io';
-import { UseGuards } from '@nestjs/common';
+import { forwardRef, Inject, UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { MessageService } from './message.service';
 import { CreateMessageDto } from './dto/create-message.dto';
@@ -16,8 +16,12 @@ export class MessageGateway {
   @WebSocketServer()
   server: Server;
 
-  constructor(private readonly messageService: MessageService) {}
-
+  constructor(
+    @Inject(forwardRef(() => MessageService)) // Solution ultime
+    private readonly messageService: MessageService
+  ) {
+    console.log('MessageService injected:', !!messageService); // Vérification
+  }
   @SubscribeMessage('joinRoom')
   handleJoinRoom(@ConnectedSocket() client: Socket, @MessageBody() userId: string) {
     client.join(userId);

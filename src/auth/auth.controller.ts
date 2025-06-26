@@ -37,7 +37,7 @@ export class AuthController {
     const isProduction = process.env.NODE_ENV === "production"
 
     // Cookie pour l'access token
-    res.cookie("accessToken", accesstoken, {
+    res.cookie("accesstoken", accesstoken, {
       httpOnly: true,
       secure: isProduction,
       sameSite: isProduction ? "strict" : "lax",
@@ -46,7 +46,7 @@ export class AuthController {
     })
 
     // Cookie pour le refresh token
-    res.cookie("refreshToken", refreshtoken, {
+    res.cookie("refreshtoken", refreshtoken, {
       httpOnly: true,
       secure: isProduction,
       sameSite: isProduction ? "strict" : "lax",
@@ -58,7 +58,7 @@ export class AuthController {
   private clearCookies(res: Response) {
     const isProduction = process.env.NODE_ENV === "production"
 
-    res.clearCookie("accessToken", {
+    res.clearCookie("accesstoken", {
       path: "/",
       httpOnly: true,
       secure: isProduction,
@@ -105,7 +105,7 @@ export class AuthController {
     return {
       user: result.user,
       message: "Connexion réussie",
-      accesstoken:result.tokens.accessToken,
+      accessToken: result.tokens.accessToken,
     }
   }
 

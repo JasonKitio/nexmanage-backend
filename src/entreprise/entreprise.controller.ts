@@ -28,6 +28,7 @@ import { Roles } from '../auth/decorators/roles.decorator';
 import { Role } from '../utils/enums/enums';
 import { Response } from 'express';
 import { AssignManagerDto } from './dto/assignManager.dto';
+import { ApiResponse,ApiOperation,ApiParam } from '@nestjs/swagger';
 
 @Controller('entreprises')
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -61,10 +62,10 @@ export class EntrepriseController {
     return this.entrepriseService.findAllDeleted(paginationDto);
   }
 
-  @Get(':id')
-  async findOne(@Param('id') id: string) {
-    return this.entrepriseService.findOne(id);
-  }
+  // @Get(':id')
+  // async findOne(@Param('id') id: string) {
+  //   return this.entrepriseService.findOne(id);
+  // }
 
   @Get(':id/users')
   async getUsersByEntreprise(
@@ -153,4 +154,31 @@ export class EntrepriseController {
   async restore(@Param('id') id: string) {
     return this.entrepriseService.restore(id);
   }
+  @Get(':companyId')
+@ApiOperation({ summary: 'Récupérer une entreprise par son ID' })
+@ApiParam({ 
+  name: 'companyId', 
+  type: 'string', 
+  description: 'ID de l\'entreprise à récupérer' 
+})
+@ApiResponse({
+  status: 200,
+  description: 'Entreprise récupérée avec succès',
+})
+@ApiResponse({
+  status: 404,
+  description: 'Entreprise introuvable ou accès non autorisé',
+})
+@ApiResponse({
+  status: 401,
+  description: 'Non autorisé',
+})
+async getCompanyById(
+  @Param('companyId') companyId: string,
+  @Request() req: any,
+) {
+  const userId = req.user.id; // Récupérer l'ID de l'utilisateur depuis le token JWT
+  
+  return await this.entrepriseService.getCompanyById(userId, companyId);
+}
 }
