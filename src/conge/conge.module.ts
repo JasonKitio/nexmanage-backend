@@ -8,10 +8,11 @@ import { UtilisateurEntreprise } from 'src/UtilisateurEntreprise/entities/utilis
 import { NotificationService } from './notification.service';
 import { MessageModule } from 'src/message/message.module';
 import { AuthModule } from 'src/auth/auth.module';
+import { Entreprise } from 'src/entreprise/entities/entreprise.entity';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([Conge, Utilisateur, UtilisateurEntreprise]),
+    TypeOrmModule.forFeature([Conge, Utilisateur, UtilisateurEntreprise,Entreprise]),
       forwardRef(() => MessageModule),
     AuthModule
   ],

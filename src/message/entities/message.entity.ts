@@ -1,5 +1,6 @@
 import { Entity, Column, PrimaryGeneratedColumn, CreateDateColumn, ManyToOne, JoinColumn } from 'typeorm';
 import { Utilisateur } from '../../User/entities/utilisateur.entity';
+import { Entreprise } from 'src/entreprise/entities/entreprise.entity';
 
 @Entity()
 export class Message {
@@ -28,4 +29,17 @@ export class Message {
 
   @Column()
   destinataireId: string;
+   @ManyToOne(
+    () => Entreprise,
+    (entreprise) => entreprise.messages,
+    {
+      nullable: true,
+      onDelete: "CASCADE",
+    },
+  )
+  @JoinColumn({ name: "entrepriseId" })
+  entreprise: Entreprise
+
+  @Column({nullable:true})
+  entrepriseId: string
 }
