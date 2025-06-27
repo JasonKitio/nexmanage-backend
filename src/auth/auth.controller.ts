@@ -27,6 +27,8 @@ import  { UpdatePasswordDto } from "./dto/updatePassword.dto"
 import  { UpdatePhoneDto } from "./dto/updatePhone.dto"
 import  { ResendCodeDto } from "./dto/resendCodedto"
 import  { Response } from "express"
+import { ChangePasswordDto } from "./dto/change-password.dto"
+
 
 @ApiTags("Auth")
 @Controller("auth")
@@ -36,21 +38,19 @@ export class AuthController {
   private setCookies(res: Response, accesstoken: string, refreshtoken: string) {
     const isProduction = process.env.NODE_ENV === "production"
 
-    // Cookie pour l'access token
     res.cookie("accesstoken", accesstoken, {
       httpOnly: true,
       secure: isProduction,
       sameSite: isProduction ? "strict" : "lax",
-      maxAge: 15 * 60 * 1000, // 15 minutes
+      maxAge: 15 * 60 * 1000,
       path: "/",
     })
 
-    // Cookie pour le refresh token
     res.cookie("refreshtoken", refreshtoken, {
       httpOnly: true,
       secure: isProduction,
       sameSite: isProduction ? "strict" : "lax",
-      maxAge: 7 * 24 * 60 * 60 * 1000, // 7 jours
+      maxAge: 7 * 24 * 60 * 60 * 1000,
       path: "/",
     })
   }
@@ -73,19 +73,20 @@ export class AuthController {
     })
   }
 
-  @Post('register')
+  @Post("register")
   @HttpCode(HttpStatus.CREATED)
-  @ApiOperation({ summary: 'Inscription classique (Admin par défaut)' })
+  @ApiOperation({ summary: "Inscription classique (Admin par défaut)" })
   async register(@Body() registerDto: RegisterDto) {
-    return this.authService.register(registerDto);
+    return this.authService.register(registerDto)
   }
 
   @Post("verify-registration")
   async verifyRegistration(@Body() verifyPhoneDto: VerifyPhoneDto, @Res({ passthrough: true }) res: Response) {
     const result = await this.authService.verifyPhoneAndRegister(verifyPhoneDto)
 
-    // Définir les cookies avec les tokens
-    this.setCookies(res, result.tokens.accessToken, result.tokens.refreshToken)
+    if (result.tokens) {
+      this.setCookies(res, result.tokens.accessToken, result.tokens.refreshToken)
+    }
 
     return {
       user: result.user,
@@ -99,12 +100,40 @@ export class AuthController {
   async login(@Body() loginDto: LoginDto, @Res({ passthrough: true }) res: Response) {
     const result = await this.authService.login(loginDto)
 
-    // Définir les cookies avec les tokens
-    this.setCookies(res, result.tokens.accessToken, result.tokens.refreshToken)
+    // Vérifier si l'utilisateur doit changer son mot de passe
+    if (result.mustChangePassword) {
+      return {
+        mustChangePassword: true,
+        userId: result.userId,
+        message: result.message,
+      }
+    }
+
+    if (result.tokens) {
+      this.setCookies(res, result.tokens.accessToken, result.tokens.refreshToken)
+    }
 
     return {
       user: result.user,
       message: "Connexion réussie",
+      accessToken: result.tokens?.accessToken,
+    }
+  }
+
+  @Post("change-password-first-login")
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: "Changer le mot de passe lors de la première connexion" })
+  async changePasswordFirstLogin(
+   @Body() body: {  changePasswordDto: ChangePasswordDto,userId: string; },
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const result = await this.authService.changePasswordFirstLogin(body.userId, body.changePasswordDto)
+
+    this.setCookies(res, result.tokens.accessToken, result.tokens.refreshToken)
+
+    return {
+      user: result.user,
+      message: "Mot de passe changé avec succès, connexion réussie",
       accessToken: result.tokens.accessToken,
     }
   }
@@ -112,8 +141,7 @@ export class AuthController {
   @Post("refresh")
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: "Rafraîchir le token d'accès" })
-  async refreshToken(@Request() req, @Res({ passthrough: true }) res: Response) {
-    // Extraire le refresh token depuis les cookies
+  async refreshToken(req, @Res({ passthrough: true }) res: Response) {
     const refreshToken = req.cookies?.["refreshToken"]
 
     if (!refreshToken) {
@@ -122,7 +150,6 @@ export class AuthController {
 
     const result = await this.authService.refreshToken({ refreshToken })
 
-    // Définir les nouveaux cookies
     this.setCookies(res, result.tokens.accessToken, result.tokens.refreshToken)
 
     return {
@@ -135,107 +162,100 @@ export class AuthController {
   @ApiBearerAuth()
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: "Déconnexion" })
-  async logout(@Request() req, @Res({ passthrough: true }) res: Response) {
-    // Extraire le token depuis les cookies ou l'en-tête
+  async logout(req, @Res({ passthrough: true }) res: Response) {
     const token = req.cookies?.["accessToken"] || req.headers.authorization?.replace("Bearer ", "")
     const userId = req.user.sub
 
     const result = await this.authService.logout(token, userId)
 
-    // Supprimer les cookies
     this.clearCookies(res)
 
     return result
   }
 
-  @Get('profile')
+  @Get("profile")
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
-  @ApiOperation({ summary: 'Obtenir le profil utilisateur' })
-  getProfile(@Request() req) {
+  @ApiOperation({ summary: "Obtenir le profil utilisateur" })
+  getProfile(req) {
     return {
       user: req.user,
-      message: 'Profil récupéré avec succès'
-    };
+      message: "Profil récupéré avec succès",
+    }
   }
 
-  @Post("create-user")
+  @Post("entreprise/:entrepriseId/create-user")
   @Roles(Role.ADMIN)
   @UseGuards(JwtAuthGuard, RolesGuard)
   @ApiBearerAuth()
-  @ApiOperation({ summary: "Création d'utilisateur par un admin" })
-  async createUser(@Body() createUserDto: CreateUserDto, @Request() req) {
-    return this.authService.createUser(createUserDto, req.user.sub)
+  @ApiOperation({ summary: "Création d'utilisateur par un admin dans une entreprise" })
+  async createUserForEntreprise(entrepriseId: string, createUserDto: CreateUserDto, req) {
+    return this.authService.createUser(createUserDto, req.user.sub, entrepriseId)
   }
 
-  @Post('forgot-password')
+  @Post("forgot-password")
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Demande de réinitialisation de mot de passe (Admin uniquement)' })
-  async forgotPassword(@Body() forgotPasswordDto: ForgotPasswordDto) {
-    return this.authService.forgotPassword(forgotPasswordDto);
+  @ApiOperation({ summary: "Demande de réinitialisation de mot de passe (Admin uniquement)" })
+  async forgotPassword(forgotPasswordDto: ForgotPasswordDto) {
+    return this.authService.forgotPassword(forgotPasswordDto)
   }
 
-  @Post('reset-password')
+  @Post("reset-password")
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Réinitialiser le mot de passe avec le code de vérification' })
-  async resetPassword(@Body() resetPasswordDto: ResetPasswordDto) {
-    return this.authService.resetPassword(resetPasswordDto);
+  @ApiOperation({ summary: "Réinitialiser le mot de passe avec le code de vérification" })
+  async resetPassword(resetPasswordDto: ResetPasswordDto) {
+    return this.authService.resetPassword(resetPasswordDto)
   }
 
   @Post("update-password")
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard)
   @ApiOperation({ summary: "Changer le mot de passe connecté" })
-  async updatePassword(@Body() updatePasswordDto: UpdatePasswordDto, @Request() req) {
+  async updatePassword(updatePasswordDto: UpdatePasswordDto, req) {
     return this.authService.updatePassword(req.user.sub, updatePasswordDto)
   }
 
   @Post("update-phone")
   @UseGuards(JwtAuthGuard)
-  async updatePhoneNumber(@Body() updatePhoneDto: UpdatePhoneDto, @Request() req) {
+  async updatePhoneNumber(updatePhoneDto: UpdatePhoneDto, req) {
     return this.authService.updatePhoneNumber(req.user.sub, updatePhoneDto)
   }
 
   @Post("verify-phone-update")
   @UseGuards(JwtAuthGuard)
-  async verifyPhoneUpdate(@Body() verifyPhoneDto: VerifyPhoneDto, @Request() req) {
+  async verifyPhoneUpdate(verifyPhoneDto: VerifyPhoneDto, req) {
     return this.authService.verifyAndUpdatePhone(req.user.sub, verifyPhoneDto)
   }
 
-  @Post('resend-code')
-  @ApiOperation({ summary: 'Renvoyer un code de vérification' })
-  async resendCode(@Body() resendCodeDto: ResendCodeDto) {
-    return this.authService.resendVerificationCode(
-      resendCodeDto.phone,
-      resendCodeDto.type,
-      resendCodeDto.userId
-    );
+  @Post("resend-code")
+  @ApiOperation({ summary: "Renvoyer un code de vérification" })
+  async resendCode(resendCodeDto: ResendCodeDto) {
+    return this.authService.resendVerificationCode(resendCodeDto.phone, resendCodeDto.type, resendCodeDto.userId)
   }
 
   @Post("resend-phone-update-code")
   @UseGuards(JwtAuthGuard)
-  async resendPhoneUpdateCode(@Body() body: { phone: string }, @Request() req) {
+  async resendPhoneUpdateCode(body: { phone: string }, req) {
     return this.authService.resendVerificationCode(body.phone, "phone_update", req.user.sub)
   }
 
-  // Routes Google OAuth
-  @Get('google/login')
-  @ApiOperation({ summary: 'Initier la connexion Google (Admins)' })
-  async googleLogin(@Res() res: Response) {
-    const authUrl = this.authService.getGoogleAuthUrl();
-    return res.redirect(authUrl);
+  @Get("google/login")
+  @ApiOperation({ summary: "Initier la connexion Google (Admins)" })
+  async googleLogin(res: Response) {
+    const authUrl = this.authService.getGoogleAuthUrl()
+    return res.redirect(authUrl)
   }
 
-  @Get('google/employee-login')
-  @ApiOperation({ summary: 'Initier la connexion Google (Employés)' })
-  async googleEmployeeLogin(@Res() res: Response) {
-    const authUrl = this.authService.getGoogleEmployeeAuthUrl();
-    return res.redirect(authUrl);
+  @Get("google/employee-login")
+  @ApiOperation({ summary: "Initier la connexion Google (Employés)" })
+  async googleEmployeeLogin(res: Response) {
+    const authUrl = this.authService.getGoogleEmployeeAuthUrl()
+    return res.redirect(authUrl)
   }
 
   @Get("google/callback")
   @ApiOperation({ summary: "Callback Google OAuth (Admins)" })
-  async googleCallback(@Query('code') code: string, @Query('state') state: string, @Res() res: Response) {
+  async googleCallback(code: string, state: string, res: Response) {
     try {
       const result = await this.authService.googleCallback(code, state)
 
@@ -251,7 +271,7 @@ export class AuthController {
 
   @Get("google/employee/callback")
   @ApiOperation({ summary: "Callback Google OAuth (Employés)" })
-  async googleEmployeeCallback(@Query('code') code: string, @Query('state') state: string, @Res() res: Response) {
+  async googleEmployeeCallback(code: string, state: string, res: Response) {
     try {
       const result = await this.authService.googleEmployeeCallback(code, state)
 

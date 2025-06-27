@@ -22,10 +22,37 @@ export class UsersService {
     @InjectRepository(UtilisateurEntreprise)
     private readonly utilisateurEntrepriseRepository: Repository<UtilisateurEntreprise>,
   ) {}
+    private readonly DEFAULT_PASSWORD = '123456';
 
-  // MÉTHODES POUR LES UTILISATEURS PAR ENTREPRISE
+  // Nouvelles méthodes pour récupérer les utilisateurs avec leurs entreprises
+  async findByPhoneWithEntreprises(telephone: string): Promise<Utilisateur | null> {
+    return await this.userRepository.findOne({
+      where: { telephone, delete_at: IsNull() },
+      relations: ["entreprises", "entreprises.entreprise"],
+    })
+  }
 
-  // Créer un utilisateur pour une entreprise spécifique
+  async findByEmailWithEntreprises(email: string): Promise<Utilisateur | null> {
+    return this.userRepository.findOne({
+      where: { email, delete_at: IsNull() },
+      relations: ["entreprises", "entreprises.entreprise"],
+    })
+  }
+
+  async findByIdWithEntreprises(id: string): Promise<Utilisateur> {
+    const user = await this.userRepository.findOne({
+      where: { idUtilisateur: id, delete_at: IsNull() },
+      relations: ["entreprises", "entreprises.entreprise"],
+    })
+
+    if (!user) {
+      throw new NotFoundException("Utilisateur non trouvé")
+    }
+
+    return user
+  }
+
+  // Créer un utilisateur pour une entreprise spécifique avec mot de passe par défaut
   async createUserForEntreprise(entrepriseId: string, createUserDto: CreateUserDto): Promise<Utilisateur> {
     // Vérifier que l'entreprise existe
     const entreprise = await this.entrepriseRepository.findOne({
@@ -36,9 +63,9 @@ export class UsersService {
       throw new NotFoundException(`Entreprise avec l'ID ${entrepriseId} non trouvée`)
     }
 
-    const { telephone, email, motDePasse, ...userData } = createUserDto
+    const { telephone, email, ...userData } = createUserDto
 
-    // Vérifier si le téléphone existe déjà (incluant les utilisateurs supprimés)
+    // Vérifier si le téléphone existe déjà
     const existingUser = await this.userRepository.findOne({
       where: { telephone },
       withDeleted: true,
@@ -59,8 +86,8 @@ export class UsersService {
       }
     }
 
-    // Hasher le mot de passe
-    const hashedPassword = await bcrypt.hash(motDePasse, 10)
+    // Utiliser le mot de passe par défaut "123456"
+    const hashedPassword = await bcrypt.hash(this.DEFAULT_PASSWORD, 10)
 
     const user = this.userRepository.create({
       ...userData,
@@ -810,23 +837,41 @@ export class UsersService {
     })
   }
 
-  async getMe(userId: string): Promise<Partial<Utilisateur>> {
+async getMe(userId: string): Promise<{
+    idUtilisateur: string;
+    nom: string;
+    telephone: string;
+    role: Role;
+    isActif: boolean;
+    entreprises: { id: string; nom: string; isOwner: boolean }[];
+  }> {
     const utilisateur = await this.userRepository.findOne({
       where: { idUtilisateur: userId },
       select: {
         idUtilisateur: true,
         nom: true,
-        email: true,
         telephone: true,
         role: true,
         isActif: true,
       },
+      relations: ["entreprises", "entreprises.entreprise"],
     })
 
     if (!utilisateur) {
       throw new NotFoundException("Utilisateur non trouvé")
     }
 
-    return utilisateur
+    return {
+      idUtilisateur: utilisateur.idUtilisateur,
+      nom: utilisateur.nom,
+      telephone: utilisateur.telephone,
+      role: utilisateur.role,
+      isActif: utilisateur.isActif,
+      entreprises: utilisateur.entreprises?.map((ue) => ({
+        id: ue.entreprise.idEntreprise,
+        nom: ue.entreprise.nom,
+        isOwner: ue.isOwner,
+      })) || [],
+    }
   }
 }
